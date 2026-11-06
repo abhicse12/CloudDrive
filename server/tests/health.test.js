@@ -29,6 +29,18 @@ describe('GET /api/health (liveness)', () => {
     expect(res.headers['content-security-policy']).toBeDefined();
     expect(res.headers['x-powered-by']).toBeUndefined();
   });
+
+  it('tells browsers and proxies never to store API responses', async () => {
+    const res = await request(app).get('/api/health');
+
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('sends no ETag, so browsers can never get a 304 "use your cached copy"', async () => {
+    const res = await request(app).get('/api/health/ready');
+
+    expect(res.headers.etag).toBeUndefined();
+  });
 });
 
 describe('request IDs', () => {

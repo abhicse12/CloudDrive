@@ -21,6 +21,9 @@ export function createApp() {
   const app = express();
 
   app.disable('x-powered-by'); // don't advertise "Express" to attackers
+  // No ETags: they let the browser revalidate and get "304, use your cached copy",
+  // which is wrong for live, personal API data (see Cache-Control: no-store below).
+  app.set('etag', false);
   app.set('trust proxy', env.TRUST_PROXY);
 
   // 1. Tag the request, then log it (the logger reuses the ID).
@@ -59,10 +62,17 @@ export function createApp() {
   // 6. Parse JSON bodies. Small limit: files go through multipart uploads, not JSON.
   app.use(express.json({ limit: '100kb' }));
 
-  // 7. Routes.
+  // 7. API responses are live, often personal data (e.g. /auth/me): never let the
+  //    browser or any proxy store them. Also stops 304 "use your cached copy" replies.
+  app.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
+
+  // 8. Routes.
   app.use('/api', apiRouter);
 
-  // 8. Nothing matched → 404. Any error → standard JSON error. Must be last.
+  // 9. Nothing matched → 404. Any error → standard JSON error. Must be last.
   app.use(notFound);
   app.use(errorHandler);
 

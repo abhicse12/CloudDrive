@@ -5,13 +5,17 @@
   "description": "CloudDrive - cloud file storage and sharing SaaS",
   "type": "module",
   "workspaces": [
-    "server"
+    "server",
+    "client"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "dev": "npm run dev -w server",
+    "dev": "concurrently --names api,web --prefix-colors blue,magenta --kill-others-on-fail \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client",
     "test": "npm test -w server",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -22,8 +26,11 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "concurrently": "10.0.6",
     "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
     "globals": "17.14.0",
     "prettier": "3.9.10"
   }
