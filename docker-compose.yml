@@ -1,0 +1,53 @@
+# Local development infrastructure. Start with: docker compose up -d
+#
+# These credentials are for LOCAL DEVELOPMENT ONLY. The ports are bound to 127.0.0.1,
+# so the databases are reachable from this computer but not from your network.
+# Host ports 5434/5433 are used (not the default 5432) so they don't clash with a
+# natively installed PostgreSQL service on this machine.
+# In AWS, RDS credentials come from Secrets Manager - never from this file.
+name: clouddrive
+
+services:
+  # Development database - your data persists in the "db-data" volume.
+  db:
+    image: postgres:17-alpine
+    container_name: clouddrive-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clouddrive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clouddrive_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-clouddrive}
+    ports:
+      - '127.0.0.1:5434:5432'
+    volumes:
+      # Named Docker volume (stored inside Docker, NOT in this OneDrive folder,
+      # because OneDrive syncing database files while Postgres writes them corrupts them).
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Test database - automated tests wipe it, so it is kept separate from dev data.
+  # tmpfs = data lives in RAM: very fast, and disappears when the container stops.
+  db-test:
+    image: postgres:17-alpine
+    container_name: clouddrive-db-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clouddrive
+      POSTGRES_PASSWORD: clouddrive_test_password
+      POSTGRES_DB: clouddrive_test
+    ports:
+      - '127.0.0.1:5433:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clouddrive -d clouddrive_test']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

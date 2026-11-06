@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment files (real secrets) - only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# Uploaded user files and temporary upload chunks
+server/storage-data/
+server/tmp-uploads/
+
+# Generated code
+server/src/generated/
+
+# Build output and test coverage
+dist/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Terraform (Phase 8)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars

@@ -1,0 +1,30 @@
+{
+  "name": "clouddrive",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CloudDrive - cloud file storage and sharing SaaS",
+  "type": "module",
+  "workspaces": [
+    "server"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "npm run dev -w server",
+    "test": "npm test -w server",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "prettier": "3.9.10"
+  }
+}
