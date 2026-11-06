@@ -12,6 +12,30 @@ const NAV_LINKS = [
   { href: '#faq', label: 'FAQ' },
 ];
 
+function FooterColumn({ title, links }) {
+  const linkClass = 'text-sm text-fg-muted transition-colors hover:text-fg';
+  return (
+    <div>
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <ul className="mt-3 space-y-2">
+        {links.map((link) => (
+          <li key={link.label}>
+            {link.to ? (
+              <Link to={link.to} className={linkClass}>
+                {link.label}
+              </Link>
+            ) : (
+              <a href={link.href} className={linkClass}>
+                {link.label}
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** Marketing pages: sticky translucent header, content, footer. */
 export function PublicLayout() {
   const status = useSelector(selectAuthStatus);
@@ -63,9 +87,27 @@ export function PublicLayout() {
       </main>
 
       <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-sm text-fg-subtle sm:flex-row sm:px-6">
-          <Logo className="text-fg-muted" />
-          <p>© {new Date().getFullYear()} CloudDrive. Built as a learning project.</p>
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-[2fr_1fr_1fr] sm:px-6">
+          <div>
+            <Logo />
+            <p className="mt-3 max-w-xs text-sm text-fg-muted">
+              Private cloud storage for your files - upload, organise, preview and share.
+            </p>
+          </div>
+          <FooterColumn title="Product" links={NAV_LINKS} />
+          <FooterColumn
+            title="Account"
+            links={[
+              { to: '/register', label: 'Create account' },
+              { to: '/login', label: 'Log in' },
+              { to: '/forgot-password', label: 'Reset password' },
+            ]}
+          />
+        </div>
+        <div className="border-t border-border">
+          <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-fg-subtle sm:px-6">
+            © {new Date().getFullYear()} CloudDrive. Built as a learning project.
+          </p>
         </div>
       </footer>
     </div>

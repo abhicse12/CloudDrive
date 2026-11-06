@@ -40,15 +40,21 @@ export const apiError = (status, code, message, details) => ({
 });
 
 /**
- * Renders one page inside the real guard + a stub dashboard, with a fresh store.
- * Logged-out by default (status 'guest').
+ * Renders one page with a fresh store and a stub dashboard. Logged-out by default.
+ * `guestOnly` wraps the page in the real RequireGuest guard, as the app does for the
+ * login/register pages; pass false for pages anyone may see (e.g. the landing page).
  */
-export function renderPage(path, PageComponent, { url = path, state, auth } = {}) {
+export function renderPage(
+  path,
+  PageComponent,
+  { url = path, state, auth, guestOnly = true } = {},
+) {
   const store = createStore({ auth: auth ?? { user: null, status: 'guest' } });
   const [pathname, query] = url.split('?');
+  const pageRoute = { path, element: <PageComponent /> };
   const router = createMemoryRouter(
     [
-      { element: <RequireGuest />, children: [{ path, element: <PageComponent /> }] },
+      guestOnly ? { element: <RequireGuest />, children: [pageRoute] } : pageRoute,
       { path: '/app', element: <p>Dashboard</p> },
       // Stub login page as a navigation target, unless the login page is under test.
       ...(path === '/login' ? [] : [{ path: '/login', element: <p>Login page</p> }]),

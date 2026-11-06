@@ -73,6 +73,13 @@
     @apply bg-canvas text-fg antialiased;
   }
 
+  /* Anchor links (#pricing) glide instead of jumping - unless the user asked for less motion. */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
   body {
     @apply min-h-dvh font-sans;
   }
