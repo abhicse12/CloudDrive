@@ -41,7 +41,9 @@ const authSlice = createSlice({
       // Logged out locally even if the network call failed: never leave the user
       // looking logged in after pressing "Log out".
       .addMatcher(authApi.endpoints.logout.matchFulfilled, clearUser)
-      .addMatcher(authApi.endpoints.logout.matchRejected, clearUser);
+      .addMatcher(authApi.endpoints.logout.matchRejected, clearUser)
+      // A successful reset ends ALL sessions on the server, so this browser too.
+      .addMatcher(authApi.endpoints.resetPassword.matchFulfilled, clearUser);
   },
 });
 

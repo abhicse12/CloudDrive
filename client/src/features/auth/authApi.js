@@ -19,15 +19,35 @@ export const authApi = baseApi.injectEndpoints({
       query: () => ({ url: '/auth/logout', method: 'POST' }),
       // Whatever the result, forget all cached data: the next user on this
       // browser must not see the previous user's files.
-      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
-        try {
-          await queryFulfilled;
-        } finally {
-          dispatch(baseApi.util.resetApiState());
-        }
-      },
+      onQueryStarted: resetCacheWhenSettled,
+    }),
+
+    forgotPassword: build.mutation({
+      query: (body) => ({ url: '/auth/forgot-password', method: 'POST', data: body }),
+    }),
+
+    // Resetting a password ends every session on the server, including this browser's;
+    // authSlice marks the user as logged out, and the cache is cleared here.
+    resetPassword: build.mutation({
+      query: (body) => ({ url: '/auth/reset-password', method: 'POST', data: body }),
+      onQueryStarted: resetCacheWhenSettled,
     }),
   }),
 });
 
-export const { useLoginMutation, useRegisterMutation, useLogoutMutation } = authApi;
+async function resetCacheWhenSettled(_arg, { dispatch, queryFulfilled }) {
+  try {
+    await queryFulfilled;
+  } catch {
+    // Failure is handled by the component / authSlice; nothing to do here.
+  }
+  dispatch(baseApi.util.resetApiState());
+}
+
+export const {
+  useLoginMutation,
+  useRegisterMutation,
+  useLogoutMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+} = authApi;

@@ -52,6 +52,12 @@ export default defineConfig([
     extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
   },
 
+  // Tests and test helpers are never hot-reloaded, so the HMR export rule doesn't apply.
+  {
+    files: ['client/src/**/*.test.{js,jsx}', 'client/src/test-utils/**'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+
   // Must be last: turns off stylistic rules that would fight with Prettier
   prettier,
 ]);

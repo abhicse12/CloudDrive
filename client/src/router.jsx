@@ -11,11 +11,6 @@ import { RouteErrorPage } from './pages/RouteErrorPage.jsx';
  */
 const page = (load, exportName) => async () => ({ Component: (await load())[exportName] });
 
-const authPlaceholder = page(
-  () => import('./pages/auth/AuthPlaceholderPage.jsx'),
-  'AuthPlaceholderPage',
-);
-
 /**
  * Route tree. Layout routes (no `path`) wrap their children; guard routes decide
  * whether their children may render at all.
@@ -41,13 +36,28 @@ export const router = createBrowserRouter([
             // Only for logged-out visitors
             element: <RequireGuest />,
             children: [
-              { path: 'login', lazy: authPlaceholder },
-              { path: 'register', lazy: authPlaceholder },
-              { path: 'forgot-password', lazy: authPlaceholder },
+              {
+                path: 'login',
+                lazy: page(() => import('./pages/auth/LoginPage.jsx'), 'LoginPage'),
+              },
+              {
+                path: 'register',
+                lazy: page(() => import('./pages/auth/RegisterPage.jsx'), 'RegisterPage'),
+              },
+              {
+                path: 'forgot-password',
+                lazy: page(
+                  () => import('./pages/auth/ForgotPasswordPage.jsx'),
+                  'ForgotPasswordPage',
+                ),
+              },
             ],
           },
           // Reset links must work whether or not someone is logged in on this browser.
-          { path: 'reset-password', lazy: authPlaceholder },
+          {
+            path: 'reset-password',
+            lazy: page(() => import('./pages/auth/ResetPasswordPage.jsx'), 'ResetPasswordPage'),
+          },
         ],
       },
 
