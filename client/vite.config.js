@@ -25,4 +25,10 @@ export default defineConfig({
     port: 4173,
     proxy: { '/api': { target: API_TARGET, changeOrigin: false } },
   },
+
+  // Vitest: run component tests in a simulated browser (jsdom).
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.{js,jsx}'],
+  },
 });
