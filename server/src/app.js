@@ -1,9 +1,11 @@
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env, isProduction } from './config/env.js';
 import { logger } from './config/logger.js';
+import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { requestId } from './middleware/requestId.js';
@@ -48,13 +50,19 @@ export function createApp() {
   // 3. Only listed browser origins may call the API with cookies.
   app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
 
-  // 4. Parse JSON bodies. Small limit: files go through multipart uploads, not JSON.
+  // 4. Read the Cookie header into req.cookies (auth tokens + CSRF token live there).
+  app.use(cookieParser());
+
+  // 5. Reject cross-site forged requests BEFORE doing any work on them.
+  app.use('/api', csrfProtection);
+
+  // 6. Parse JSON bodies. Small limit: files go through multipart uploads, not JSON.
   app.use(express.json({ limit: '100kb' }));
 
-  // 5. Routes.
+  // 7. Routes.
   app.use('/api', apiRouter);
 
-  // 6. Nothing matched → 404. Any error → standard JSON error. Must be last.
+  // 8. Nothing matched → 404. Any error → standard JSON error. Must be last.
   app.use(notFound);
   app.use(errorHandler);
 

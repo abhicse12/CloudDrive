@@ -185,15 +185,19 @@ model Share {
 /// One row per logged-in device. Holds the hash of the refresh token, so a session can
 /// be revoked (logout, password change, suspension) even though JWTs are stateless.
 model Session {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Char(64)
-  userAgent        String?   @map("user_agent") @db.VarChar(512)
-  ip               String?   @db.VarChar(45)
-  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
-  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  refreshTokenHash  String    @unique @map("refresh_token_hash") @db.Char(64)
+  /// Hash of the token that was replaced at the last rotation. If it is ever presented
+  /// again, someone is replaying an old (possibly stolen) token → revoke the session.
+  previousTokenHash String?   @unique @map("previous_token_hash") @db.Char(64)
+  rotatedAt         DateTime? @map("rotated_at") @db.Timestamptz(3)
+  userAgent         String?   @map("user_agent") @db.VarChar(512)
+  ip                String?   @db.VarChar(45)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

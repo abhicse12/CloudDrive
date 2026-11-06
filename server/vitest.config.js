@@ -13,6 +13,10 @@ export default defineConfig({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       DATABASE_URL: TEST_DATABASE_URL,
+      // Test-only secret (not used anywhere real).
+      JWT_ACCESS_SECRET: 'test-only-secret-that-is-at-least-32-characters-long',
+      // Minimum bcrypt cost: keeps password hashing fast in tests.
+      BCRYPT_ROUNDS: '4',
     },
     globalSetup: './tests/globalSetup.js',
     // Test files share one database, so run them one at a time to avoid interference.

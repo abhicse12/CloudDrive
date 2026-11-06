@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { prisma } from '../src/config/prisma.js';
+import { api } from './helpers/http.js';
 
 const app = createApp();
 
@@ -85,7 +86,7 @@ describe('error handling', () => {
   });
 
   it('returns 400 for malformed JSON bodies', async () => {
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/health')
       .set('Content-Type', 'application/json')
       .send('{"broken":');
@@ -95,7 +96,7 @@ describe('error handling', () => {
   });
 
   it('returns 413 for oversized JSON bodies', async () => {
-    const res = await request(app)
+    const res = await api(app)
       .post('/api/health')
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ data: 'x'.repeat(200 * 1024) }));
