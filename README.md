@@ -4,18 +4,28 @@ A cloud file storage and sharing SaaS: upload, organise, preview and securely sh
 with per-user storage quotas. Built locally first, with an architecture designed to move to
 AWS (S3, RDS, ECS, CloudFront) without rewrites.
 
-> **Status:** Phase 2 of 8 complete (backend foundation). See
-> [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md) for the full architecture, API design and roadmap.
+> **Status:** Phases 1–4 complete: backend foundation, authentication, and the frontend
+> (landing page, auth pages, app shell, settings). File management comes in Phase 5.
+> See [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md) for the architecture, API design and roadmap.
+
+## Features so far
+
+- **Accounts:** register, log in, log out, forgot/reset password, update profile, change password
+- **Secure sessions:** short-lived JWT + rotating refresh token in HttpOnly cookies, refresh-token
+  reuse detection, CSRF protection, rate limiting, instant logout and suspension
+- **Web app:** landing page, split-screen auth pages, dashboard shell with sidebar, settings,
+  light/dark/system theme, responsive down to phone size
+- **Quality:** 100+ automated tests (API against a real test database, UI with Testing Library)
 
 ## Tech stack
 
-| Layer    | Technology                                                            |
-| -------- | --------------------------------------------------------------------- |
-| Backend  | Node.js 24, Express 5, Prisma 7, PostgreSQL 17, Zod, pino             |
-| Frontend | React, Vite, Tailwind CSS, Redux Toolkit _(Phase 4)_                  |
-| Testing  | Vitest, Supertest (against a real, separate test database)            |
-| Tooling  | ESLint, Prettier, Docker Compose                                      |
-| Cloud    | AWS: S3, RDS, ECS, CloudFront, IAM, CloudWatch, Terraform _(Phase 8)_ |
+| Layer    | Technology                                                                                    |
+| -------- | --------------------------------------------------------------------------------------------- |
+| Backend  | Node.js 24, Express 5, Prisma 7, PostgreSQL 17, Zod, bcrypt, JWT, pino                        |
+| Frontend | React 19, Vite 8, Tailwind CSS 4, React Router 8, Redux Toolkit + RTK Query, Axios, RHF + Zod |
+| Testing  | Vitest, Supertest, Testing Library, jsdom                                                     |
+| Tooling  | npm workspaces, ESLint, Prettier, Docker Compose                                              |
+| Cloud    | AWS: S3, RDS, ECS, CloudFront, IAM, CloudWatch, Terraform _(Phase 8)_                         |
 
 ## Prerequisites
 
@@ -25,39 +35,51 @@ AWS (S3, RDS, ECS, CloudFront) without rewrites.
 ## Getting started
 
 ```bash
-# 1. Install dependencies (root + server workspace)
+# 1. Install dependencies (root + server + client workspaces)
 npm install
 
-# 2. Create your local environment file
+# 2. Create your local environment file, then edit it:
+#    - DATABASE_URL password must match docker-compose.yml (clouddrive_dev_password)
+#    - JWT_ACCESS_SECRET: generate one (command is in the file)
+#    - ADMIN_*: the first admin account
 cp server/.env.example server/.env
-#    then set DATABASE_URL's password to match docker-compose.yml (clouddrive_dev_password)
 
 # 3. Start PostgreSQL (dev on port 5434, test on port 5433)
 npm run db:up
 
-# 4. Create the database tables and generate the Prisma client
-npm run db:migrate -w server
+# 4. Create the tables, generate the Prisma client, create the admin user
+npm run db:deploy -w server
 npm run db:generate -w server
+npm run db:seed -w server
 
-# 5. Start the API (restarts automatically when files change)
+# 5. Start API (port 4000) and web app (port 5173) together
 npm run dev
 ```
 
-Check it works: <http://localhost:4000/api/health> and <http://localhost:4000/api/health/ready>.
+Open <http://localhost:5173>. Stop both servers with `Ctrl + C`.
+
+The browser only talks to port 5173; Vite forwards `/api/*` to the API, so the app and API share
+one origin (cookies just work). CloudFront does the same job in production.
+
+**Password reset emails** are printed in the `[api]` terminal during development (no real email
+is sent until AWS SES is added in Phase 8).
 
 ## Scripts
 
 Run from the project root:
 
-| Command                        | What it does                                    |
-| ------------------------------ | ----------------------------------------------- |
-| `npm run dev`                  | Start the API in watch mode on port 4000        |
-| `npm test`                     | Run the API test suite (uses the test database) |
-| `npm run lint` / `lint:fix`    | Check / auto-fix code quality issues            |
-| `npm run format`               | Format all files with Prettier                  |
-| `npm run db:up` / `db:down`    | Start / stop the PostgreSQL containers          |
-| `npm run db:migrate -w server` | Create + apply migrations after schema changes  |
-| `npm run db:studio -w server`  | Browse data in Prisma Studio (localhost:5555)   |
+| Command                          | What it does                                               |
+| -------------------------------- | ---------------------------------------------------------- |
+| `npm run dev`                    | Start API (4000) and web app (5173) in watch mode          |
+| `npm run dev:server` / `:client` | Start only one of them                                     |
+| `npm test`                       | Run all tests (API tests use the separate test database)   |
+| `npm run build`                  | Production build of the web app (`client/dist`)            |
+| `npm run lint` / `lint:fix`      | Check / auto-fix code quality issues                       |
+| `npm run format`                 | Format all files with Prettier                             |
+| `npm run db:up` / `db:down`      | Start / stop the PostgreSQL containers                     |
+| `npm run db:migrate -w server`   | Create + apply a migration after changing `schema.prisma`  |
+| `npm run db:seed -w server`      | Create (or promote) the admin user from `ADMIN_*` settings |
+| `npm run db:studio -w server`    | Browse data in Prisma Studio (localhost:5555)              |
 
 ## Viewing the database
 
@@ -71,33 +93,59 @@ Port 5434 (not the default 5432) avoids clashing with a natively installed Postg
 ## Environment variables
 
 Defined and validated in [server/src/config/env.js](server/src/config/env.js). The server
-refuses to start if any value is missing or invalid.
+refuses to start if any value is missing or invalid. See
+[server/.env.example](server/.env.example) for every variable with a placeholder.
 
-| Variable       | Example                                    | Purpose                                    |
-| -------------- | ------------------------------------------ | ------------------------------------------ |
-| `NODE_ENV`     | `development`                              | `development`, `test` or `production`      |
-| `PORT`         | `4000`                                     | HTTP port                                  |
-| `LOG_LEVEL`    | `info`                                     | pino log level                             |
-| `DATABASE_URL` | `postgresql://user:pass@localhost:5434/db` | PostgreSQL connection                      |
-| `CORS_ORIGINS` | `http://localhost:5173`                    | Comma-separated allowed browser origins    |
-| `TRUST_PROXY`  | `0`                                        | Proxies in front of the API (1 behind ALB) |
+| Variable                              | Default                 | Purpose                                               |
+| ------------------------------------- | ----------------------- | ----------------------------------------------------- |
+| `NODE_ENV`                            | `development`           | `development`, `test` or `production`                 |
+| `PORT`                                | `4000`                  | API port                                              |
+| `LOG_LEVEL`                           | `info`                  | pino log level                                        |
+| `DATABASE_URL`                        | -                       | PostgreSQL connection URL (required)                  |
+| `CORS_ORIGINS`                        | `http://localhost:5173` | Comma-separated allowed browser origins               |
+| `TRUST_PROXY`                         | `0`                     | Proxies in front of the API (1 behind an AWS ALB)     |
+| `JWT_ACCESS_SECRET`                   | -                       | Signs access tokens; 32+ random characters (required) |
+| `JWT_ACCESS_TTL_SECONDS`              | `900`                   | Access token lifetime (15 min)                        |
+| `REFRESH_TOKEN_TTL_DAYS`              | `7`                     | Refresh token lifetime, renewed on use                |
+| `BCRYPT_ROUNDS`                       | `12`                    | Password hashing cost (min 12 in production)          |
+| `COOKIE_SECURE`                       | `false`                 | HTTPS-only cookies (must be `true` in production)     |
+| `PASSWORD_RESET_TTL_MINUTES`          | `30`                    | Reset link lifetime                                   |
+| `APP_URL`                             | `http://localhost:5173` | Web app URL used in email links                       |
+| `EMAIL_PROVIDER`                      | `console`               | `console` prints emails to the log                    |
+| `DEFAULT_STORAGE_LIMIT_BYTES`         | `5368709120`            | New user quota (5 GiB)                                |
+| `ADMIN_EMAIL` / `_NAME` / `_PASSWORD` | -                       | Used only by `db:seed`                                |
 
 ## Project structure
 
 ```
 clouddrive/
-├── docker-compose.yml      PostgreSQL (dev + test)
-├── docs/                   Architecture and planning docs
-└── server/
-    ├── prisma/             Schema and migrations (incl. hand-written SQL constraints)
-    ├── tests/              API tests
+├── docker-compose.yml        PostgreSQL (dev + test)
+├── docs/                     Architecture and planning docs
+├── server/                   REST API
+│   ├── prisma/               Schema, migrations (incl. hand-written SQL constraints), seed
+│   ├── tests/                API tests (auth, security, account, health)
+│   └── src/
+│       ├── app.js            Express app + middleware order
+│       ├── server.js         Startup and graceful shutdown
+│       ├── config/           env validation, logger, Prisma client
+│       ├── routes/           URL → middleware → controller
+│       ├── controllers/      HTTP in/out only
+│       ├── services/         Business rules (auth, account, tokens)
+│       ├── repositories/     Database queries
+│       ├── middleware/       auth, roles, CSRF, rate limits, validation, errors
+│       ├── validators/       Zod request schemas
+│       ├── email/            Email provider interface (console now, SES later)
+│       └── utils/            AppError, cookies, DTOs
+└── client/                   React web app
     └── src/
-        ├── app.js          Express app + middleware order
-        ├── server.js       Startup and graceful shutdown
-        ├── config/         env validation, logger, Prisma client
-        ├── middleware/     requestId, notFound, errorHandler
-        ├── routes/         API routes
-        └── utils/          AppError
+        ├── router.jsx        Routes (lazy-loaded pages) and guards
+        ├── services/         Axios client (CSRF + silent refresh) and RTK Query base
+        ├── store/            Redux store
+        ├── features/         auth, landing, settings (API, state, components)
+        ├── layouts/          Public, Auth (split screen), App (sidebar + top bar)
+        ├── pages/            One component per route
+        ├── components/       Shared UI (Button, Input, Alert, ...)
+        └── theme/            Light / dark / system theme
 ```
 
 ## API
@@ -106,12 +154,25 @@ All responses follow one format:
 
 ```jsonc
 { "success": true, "data": { ... } }
-{ "success": false, "error": { "code": "NOT_FOUND", "message": "..." }, "requestId": "..." }
+{ "success": false, "error": { "code": "NOT_FOUND", "message": "...", "details": [ ... ] }, "requestId": "..." }
 ```
 
-| Method | Path                | Description                                     |
-| ------ | ------------------- | ----------------------------------------------- |
-| GET    | `/api/health`       | Liveness: the process is running                |
-| GET    | `/api/health/ready` | Readiness: the database is reachable (else 503) |
+State-changing requests (`POST`, `PATCH`, `DELETE`) must send the CSRF token from
+`GET /api/auth/csrf` in the `X-CSRF-Token` header. Auth tokens travel only in HttpOnly cookies.
+
+| Method | Path                        | Auth | Description                                      |
+| ------ | --------------------------- | ---- | ------------------------------------------------ |
+| GET    | `/api/health`               | -    | Liveness: the process is running                 |
+| GET    | `/api/health/ready`         | -    | Readiness: the database is reachable (else 503)  |
+| GET    | `/api/auth/csrf`            | -    | Issue CSRF token (cookie + body)                 |
+| POST   | `/api/auth/register`        | -    | Create account and log in                        |
+| POST   | `/api/auth/login`           | -    | Log in                                           |
+| POST   | `/api/auth/refresh`         | -    | Rotate refresh token, issue new access token     |
+| POST   | `/api/auth/logout`          | -    | End this session                                 |
+| GET    | `/api/auth/me`              | ✔    | Current user                                     |
+| PATCH  | `/api/auth/me`              | ✔    | Update name                                      |
+| POST   | `/api/auth/change-password` | ✔    | Change password, log out other devices           |
+| POST   | `/api/auth/forgot-password` | -    | Email a reset link (same response for any email) |
+| POST   | `/api/auth/reset-password`  | -    | Set new password from link, log out every device |
 
 The complete planned API is in [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md#6-api-design).

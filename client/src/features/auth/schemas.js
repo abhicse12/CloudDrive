@@ -25,16 +25,26 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required.'),
 });
 
-export const registerSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'Name is required.')
-    .max(100, 'Name must be at most 100 characters.'),
-  email,
-  password: newPassword,
-});
+const name = z
+  .string()
+  .trim()
+  .min(1, 'Name is required.')
+  .max(100, 'Name must be at most 100 characters.');
+
+export const registerSchema = z.object({ name, email, password: newPassword });
 
 export const forgotPasswordSchema = z.object({ email });
 
 export const resetPasswordSchema = z.object({ newPassword });
+
+export const profileSchema = z.object({ name });
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password.'),
+    newPassword,
+  })
+  .refine((values) => values.newPassword !== values.currentPassword, {
+    path: ['newPassword'],
+    message: 'New password must be different from the current one.',
+  });

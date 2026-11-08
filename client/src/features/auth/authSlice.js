@@ -38,6 +38,7 @@ const authSlice = createSlice({
       })
       .addMatcher(authApi.endpoints.login.matchFulfilled, setUser)
       .addMatcher(authApi.endpoints.register.matchFulfilled, setUser)
+      .addMatcher(authApi.endpoints.updateProfile.matchFulfilled, setUser)
       // Logged out locally even if the network call failed: never leave the user
       // looking logged in after pressing "Log out".
       .addMatcher(authApi.endpoints.logout.matchFulfilled, clearUser)

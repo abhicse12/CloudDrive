@@ -5,6 +5,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router';
 import { RequireGuest } from '../features/auth/guards.jsx';
 import { apiClient } from '../services/apiClient.js';
 import { createStore } from '../store/index.js';
+import { ThemeProvider } from '../theme/ThemeProvider.jsx';
 
 /**
  * Replaces the network with a fake API server. `routes` maps "METHOD /path" to a
@@ -61,9 +62,12 @@ export function renderPage(
     ],
     { initialEntries: [{ pathname, search: query ? `?${query}` : '', state }] },
   );
+  // Same providers as main.jsx, so pages render exactly as in the app.
   render(
     <Provider store={store}>
-      <RouterProvider router={router} />
+      <ThemeProvider>
+        <RouterProvider router={router} />
+      </ThemeProvider>
     </Provider>,
   );
   return { router, store };

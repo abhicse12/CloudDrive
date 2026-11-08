@@ -32,6 +32,17 @@ export const authApi = baseApi.injectEndpoints({
       query: (body) => ({ url: '/auth/reset-password', method: 'POST', data: body }),
       onQueryStarted: resetCacheWhenSettled,
     }),
+
+    // The response contains the updated user; authSlice stores it, so the new name
+    // appears everywhere (sidebar, menu, dashboard) at once.
+    updateProfile: build.mutation({
+      query: (body) => ({ url: '/auth/me', method: 'PATCH', data: body }),
+    }),
+
+    // Keeps this device logged in; the server logs out every OTHER session.
+    changePassword: build.mutation({
+      query: (body) => ({ url: '/auth/change-password', method: 'POST', data: body }),
+    }),
   }),
 });
 
@@ -50,4 +61,6 @@ export const {
   useLogoutMutation,
   useForgotPasswordMutation,
   useResetPasswordMutation,
+  useUpdateProfileMutation,
+  useChangePasswordMutation,
 } = authApi;

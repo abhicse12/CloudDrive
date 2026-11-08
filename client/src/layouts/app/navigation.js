@@ -10,6 +10,6 @@ export const NAV_ITEMS = [
   { to: '/app/files', label: 'My Files', Icon: FolderOpen, soon: true },
   { to: '/app/shared', label: 'Shared', Icon: Share2, soon: true },
   { to: '/app/trash', label: 'Trash', Icon: Trash2, soon: true },
-  { to: '/app/settings', label: 'Settings', Icon: Settings, soon: true },
+  { to: '/app/settings', label: 'Settings', Icon: Settings },
   { to: '/app/admin', label: 'Admin', Icon: ShieldCheck, soon: true, roles: ['ADMIN'] },
 ];

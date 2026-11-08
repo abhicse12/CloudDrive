@@ -1,7 +1,7 @@
 import { LogOut, Settings } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { useLogoutMutation } from '../../features/auth/authApi.js';
 import { selectCurrentUser } from '../../features/auth/authSlice.js';
 import { getInitials } from '../../utils/format.js';
@@ -74,14 +74,14 @@ export function UserMenu() {
             <p className="truncate text-xs text-fg-muted">{user.email}</p>
           </div>
           <div className="p-1">
-            <span
+            <Link
+              to="/app/settings"
               role="menuitem"
-              aria-disabled="true"
-              className="flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-sm text-fg-subtle"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-fg-muted transition-colors hover:bg-surface-muted hover:text-fg"
             >
               <Settings className="size-4" aria-hidden="true" /> Settings
-              <span className="ml-auto text-[10px] font-semibold uppercase">Soon</span>
-            </span>
+            </Link>
             <button
               type="button"
               role="menuitem"
