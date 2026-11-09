@@ -27,6 +27,9 @@ export default defineConfig({
       UPLOAD_TMP_DIR: path.join(TEST_STORAGE, 'tmp'),
       // Tests trigger jobs directly instead of waiting for timers.
       JOBS_ENABLED: 'false',
+      // Small limits so the limit tests don't have to send 100 MB.
+      MAX_FILE_SIZE_MB: '1',
+      MAX_FILES_PER_UPLOAD: '3',
     },
     globalSetup: './tests/globalSetup.js',
     // Test files share one database, so run them one at a time to avoid interference.

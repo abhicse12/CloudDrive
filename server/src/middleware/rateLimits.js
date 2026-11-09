@@ -93,6 +93,15 @@ export const changePasswordLimiter = createLimiter({
   keyGenerator: (req) => `user:${req.auth.userId}`,
 });
 
+// Per user. Generous, because the frontend sends one request per file (for per-file
+// progress and cancel), but it stops a script from filling the disk with requests.
+export const uploadLimiter = createLimiter({
+  windowMs: 15 * MINUTE,
+  limit: 300,
+  message: 'Too many uploads. Please wait a few minutes and try again.',
+  keyGenerator: (req) => `user:${req.auth.userId}`,
+});
+
 /** Tests only: clear all counters so each test starts fresh. */
 export async function resetRateLimits() {
   await Promise.all(stores.map((store) => store.resetAll()));

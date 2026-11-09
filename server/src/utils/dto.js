@@ -16,6 +16,20 @@ export function toUserDto(user) {
   };
 }
 
+/** storageKey and status stay server-side: clients use the file ID and API endpoints. */
+export function toFileDto(file) {
+  return {
+    id: file.id,
+    name: file.originalName,
+    folderId: file.folderId,
+    mimeType: file.mimeType,
+    category: file.category,
+    size: Number(file.sizeBytes),
+    createdAt: file.createdAt,
+    updatedAt: file.updatedAt,
+  };
+}
+
 export function toFolderDto(folder) {
   return {
     id: folder.id,
