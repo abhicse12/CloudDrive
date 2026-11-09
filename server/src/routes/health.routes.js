@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../config/prisma.js';
+import { storage } from '../storage/index.js';
 import { AppError } from '../utils/AppError.js';
 
 export const healthRouter = Router();
@@ -19,9 +20,12 @@ healthRouter.get('/', (_req, res) => {
 
 // Readiness: "can this instance serve real traffic right now?" An AWS ALB stops routing
 // requests to an instance whose readiness check fails, until it passes again.
-// (A storage check is added in Phase 5, when the storage provider exists.)
 healthRouter.get('/ready', async (req, res) => {
-  const checks = { database: await checkDatabase(req.log) };
+  const [database, fileStorage] = await Promise.all([
+    checkDatabase(req.log),
+    checkStorage(req.log),
+  ]);
+  const checks = { database, storage: fileStorage };
   const ready = Object.values(checks).every((check) => check.status === 'ok');
 
   if (!ready) {
@@ -39,6 +43,16 @@ async function checkDatabase(log) {
   } catch (err) {
     // Details go to the logs only; the public response just says "error".
     log.error({ err }, 'Readiness check: database unreachable');
+    return { status: 'error' };
+  }
+}
+
+async function checkStorage(log) {
+  try {
+    await storage.checkHealth();
+    return { status: 'ok' };
+  } catch (err) {
+    log.error({ err }, 'Readiness check: file storage unavailable');
     return { status: 'error' };
   }
 }

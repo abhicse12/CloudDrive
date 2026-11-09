@@ -1,4 +1,6 @@
 import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 // Locally, settings come from server/.env. In AWS, the platform (ECS + Secrets Manager)
@@ -8,6 +10,14 @@ const envFile = new URL('../../.env', import.meta.url);
 if (process.env.NODE_ENV !== 'test' && existsSync(envFile)) {
   process.loadEnvFile(envFile);
 }
+
+const SERVER_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+
+/** A directory setting: relative values are resolved against the server/ folder. */
+const serverPath = z
+  .string()
+  .min(1)
+  .transform((value) => path.resolve(SERVER_ROOT, value));
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -55,6 +65,24 @@ const envSchema = z.object({
 
   // ─── Storage ───
   DEFAULT_STORAGE_LIMIT_BYTES: z.coerce.bigint().positive().default(5_368_709_120n), // 5 GiB
+  // "local" keeps files on this machine's disk. "s3" (AWS) is added in Phase 8.
+  STORAGE_DRIVER: z.enum(['local']).default('local'),
+  // Relative paths are resolved from the server/ folder, not from wherever npm was run.
+  // prefault (not default): the default must also go through serverPath's transform.
+  STORAGE_LOCAL_ROOT: serverPath.prefault('./storage-data'),
+  UPLOAD_TMP_DIR: serverPath.prefault('./tmp-uploads'),
+  // Signs download links. Separate from JWT_ACCESS_SECRET: one leaked secret must not
+  // compromise both logins and file access.
+  STORAGE_SIGNING_SECRET: z.string().min(32, 'must be at least 32 characters'),
+  SIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300), // 5 minutes
+
+  // ─── Uploads ───
+  MAX_FILE_SIZE_MB: z.coerce.number().int().min(1).max(5120).default(100),
+  MAX_FILES_PER_UPLOAD: z.coerce.number().int().min(1).max(100).default(20),
+
+  // ─── Background jobs ───
+  TRASH_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  JOBS_ENABLED: z.stringbool().default(true),
 });
 
 const parsed = envSchema

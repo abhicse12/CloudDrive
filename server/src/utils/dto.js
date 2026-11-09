@@ -15,3 +15,13 @@ export function toUserDto(user) {
     createdAt: user.createdAt,
   };
 }
+
+export function toFolderDto(folder) {
+  return {
+    id: folder.id,
+    name: folder.name,
+    parentId: folder.parentId,
+    createdAt: folder.createdAt,
+    updatedAt: folder.updatedAt,
+  };
+}
