@@ -2,12 +2,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import { authReducer, sessionExpired } from '../features/auth/authSlice.js';
 import { setSessionExpiredHandler } from '../services/apiClient.js';
 import { baseApi } from '../services/baseApi.js';
+import { uploadsReducer } from '../features/uploads/uploadSlice.js';
 
 /** Creates a store. A function (not a singleton) so tests can build fresh ones. */
 export function createStore(preloadedState) {
   const store = configureStore({
     reducer: {
       auth: authReducer,
+      uploads: uploadsReducer,
       [baseApi.reducerPath]: baseApi.reducer, // RTK Query's cache
     },
     // RTK Query's middleware handles caching, refetching and cache lifetimes.

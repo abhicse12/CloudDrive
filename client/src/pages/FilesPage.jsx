@@ -1,12 +1,17 @@
-import { FolderOpen, FolderX, SearchX } from 'lucide-react';
+import { FolderOpen, FolderPlus, FolderX, Plus, SearchX, Upload } from 'lucide-react';
+import { useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { Link } from 'react-router';
 import { Breadcrumbs } from '../components/files/Breadcrumbs.jsx';
 import { FileGrid, FileTable } from '../components/files/FileViews.jsx';
 import { FolderCard } from '../components/files/FolderCard.jsx';
 import { CATEGORIES } from '../components/files/fileCategories.js';
 import { Button, ButtonLink } from '../components/ui/Button.jsx';
+import { buttonClasses } from '../components/ui/buttonClasses.js';
+import { DropdownMenu } from '../components/ui/DropdownMenu.jsx';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/States.jsx';
 import { FilesToolbar } from '../features/files/FilesToolbar.jsx';
+import { NewFolderDialog } from '../features/files/NewFolderDialog.jsx';
 import {
   useGetFilesInfiniteQuery,
   useGetFolderQuery,
@@ -14,6 +19,9 @@ import {
 } from '../features/files/filesApi.js';
 import { useBrowseParams } from '../features/files/useBrowseParams.js';
 import { useViewMode } from '../features/files/useViewMode.js';
+import { DropOverlay } from '../features/uploads/DropOverlay.jsx';
+import { startUploads } from '../features/uploads/uploadQueue.js';
+import { dialogOpened } from '../features/uploads/uploadSlice.js';
 
 /** /app/files and /app/files/:folderId: browse folders, search and filter files. */
 export function FilesPage() {
@@ -21,6 +29,8 @@ export function FilesPage() {
   const [viewMode, setViewMode] = useViewMode();
   const { folderId, q, category, sortBy, sortOrder } = params;
   const searching = q !== '';
+  const dispatch = useDispatch();
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
 
   const folder = useGetFolderQuery(folderId, { skip: !folderId });
 
@@ -64,6 +74,14 @@ export function FilesPage() {
   const folderList = showFolders ? (folders.data?.folders ?? []) : [];
   const loading = files.isLoading || (showFolders && folders.isLoading);
   const failed = files.error ?? (showFolders ? folders.error : undefined);
+  // Uploads and new folders go into the folder being viewed.
+  const target = { folderId, folderName: folder.data?.folder.name ?? 'My Files' };
+  const openUploadDialog = () => dispatch(dialogOpened(target));
+  const uploadDropped = (dropped) => {
+    dispatch(dialogOpened(target));
+    dispatch(startUploads(dropped, folderId));
+  };
+
   const title = searching ? `Results for “${q}”` : (folder.data?.folder.name ?? 'My Files');
 
   return (
@@ -86,7 +104,31 @@ export function FilesPage() {
             <Breadcrumbs crumbs={folder.data?.breadcrumbs} />
           </>
         )}
+
+        {/* Search results span every folder: there is no single place to add to. */}
+        {!searching && (
+          <DropdownMenu
+            label="New"
+            triggerClassName={buttonClasses({ size: 'sm' })}
+            trigger={
+              <>
+                <Plus className="size-4" aria-hidden="true" />
+                New
+              </>
+            }
+            items={[
+              { label: 'Upload files', Icon: Upload, onSelect: openUploadDialog },
+              { label: 'New folder', Icon: FolderPlus, onSelect: () => setNewFolderOpen(true) },
+            ]}
+          />
+        )}
       </div>
+
+      <NewFolderDialog
+        open={newFolderOpen}
+        onClose={() => setNewFolderOpen(false)}
+        parentId={folderId}
+      />
 
       <div className="mt-4">
         <FilesToolbar
@@ -97,72 +139,79 @@ export function FilesPage() {
         />
       </div>
 
-      <div className="mt-6 space-y-8">
-        {loading ? (
-          <LoadingState viewMode={viewMode} />
-        ) : failed ? (
-          <ErrorState
-            title="Couldn't load your files"
-            error={failed}
-            onRetry={() => {
-              files.refetch();
-              if (showFolders) folders.refetch();
-            }}
-          />
-        ) : folderList.length === 0 && fileList.length === 0 ? (
-          <NothingHere searching={searching} q={q} category={category} />
-        ) : (
-          <>
-            {folderList.length > 0 && (
-              <section aria-labelledby="folders-heading">
-                <h2 id="folders-heading" className="mb-3 text-sm font-medium text-fg-muted">
-                  Folders
-                </h2>
-                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                  {folderList.map((item) => (
-                    <li key={item.id} className="min-w-0">
-                      <FolderCard folder={item} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+      <DropOverlay onFiles={uploadDropped} targetName={target.folderName}>
+        <div className="mt-6 min-h-64 space-y-8">
+          {loading ? (
+            <LoadingState viewMode={viewMode} />
+          ) : failed ? (
+            <ErrorState
+              title="Couldn't load your files"
+              error={failed}
+              onRetry={() => {
+                files.refetch();
+                if (showFolders) folders.refetch();
+              }}
+            />
+          ) : folderList.length === 0 && fileList.length === 0 ? (
+            <NothingHere
+              searching={searching}
+              q={q}
+              category={category}
+              onUpload={openUploadDialog}
+            />
+          ) : (
+            <>
+              {folderList.length > 0 && (
+                <section aria-labelledby="folders-heading">
+                  <h2 id="folders-heading" className="mb-3 text-sm font-medium text-fg-muted">
+                    Folders
+                  </h2>
+                  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {folderList.map((item) => (
+                      <li key={item.id} className="min-w-0">
+                        <FolderCard folder={item} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
-            {fileList.length > 0 && (
-              <section aria-labelledby="files-heading">
-                <h2 id="files-heading" className="mb-3 text-sm font-medium text-fg-muted">
-                  Files
-                </h2>
-                {viewMode === 'list' ? (
-                  <FileTable files={fileList} />
-                ) : (
-                  <FileGrid files={fileList} />
-                )}
-
-                <div className="mt-6 flex flex-col items-center gap-2">
-                  <p className="text-xs text-fg-subtle">
-                    Showing {fileList.length} of {totalFiles} files
-                  </p>
-                  {files.hasNextPage && (
-                    <Button
-                      variant="secondary"
-                      onClick={() => files.fetchNextPage()}
-                      loading={files.isFetchingNextPage}
-                    >
-                      Load more
-                    </Button>
+              {fileList.length > 0 && (
+                <section aria-labelledby="files-heading">
+                  <h2 id="files-heading" className="mb-3 text-sm font-medium text-fg-muted">
+                    Files
+                  </h2>
+                  {viewMode === 'list' ? (
+                    <FileTable files={fileList} />
+                  ) : (
+                    <FileGrid files={fileList} />
                   )}
-                </div>
-              </section>
-            )}
-          </>
-        )}
-      </div>
+
+                  <div className="mt-6 flex flex-col items-center gap-2">
+                    <p className="text-xs text-fg-subtle">
+                      Showing {fileList.length} of {totalFiles} files
+                    </p>
+                    {files.hasNextPage && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => files.fetchNextPage()}
+                        loading={files.isFetchingNextPage}
+                      >
+                        Load more
+                      </Button>
+                    )}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+        </div>
+      </DropOverlay>
     </div>
   );
 }
 
-function NothingHere({ searching, q, category }) {
+function NothingHere({ searching, q, category, onUpload }) {
   if (searching) {
     return (
       <EmptyState
@@ -185,7 +234,13 @@ function NothingHere({ searching, q, category }) {
     <EmptyState
       Icon={FolderOpen}
       title="This folder is empty"
-      description="Files and folders you add will appear here."
+      description="Drop files anywhere on this page, or choose them from your device."
+      action={
+        <Button onClick={onUpload}>
+          <Upload className="size-4" aria-hidden="true" />
+          Upload files
+        </Button>
+      }
     />
   );
 }

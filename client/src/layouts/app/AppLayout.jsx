@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { ThemeToggle } from '../../components/common/ThemeToggle.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
+import { UploadDialog } from '../../features/uploads/UploadDialog.jsx';
+import { UploadTray } from '../../features/uploads/UploadTray.jsx';
 import { SearchBox } from './SearchBox.jsx';
 import { Toaster } from '../../components/ui/Toaster.jsx';
 import { Sidebar } from './Sidebar.jsx';
@@ -82,6 +84,9 @@ export function AppLayout() {
 
       {/* Notifications for the whole app (toast.success(...) from anywhere). */}
       <Toaster />
+      {/* Uploads live here, not in a page: they keep going while you navigate. */}
+      <UploadDialog />
+      <UploadTray />
     </div>
   );
 }
