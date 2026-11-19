@@ -16,3 +16,19 @@ export function getInitials(name = '') {
   const letters = parts.length > 1 ? [parts[0][0], parts.at(-1)[0]] : [parts[0]?.[0] ?? '?'];
   return letters.join('').toUpperCase();
 }
+
+const SHORT_DATE = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const FULL_DATE = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
+/** "Nov 19" this year, "Nov 19, 2025" otherwise. In the user's own language/format. */
+export function formatDate(value, now = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.getFullYear() === now.getFullYear()
+    ? SHORT_DATE.format(date)
+    : FULL_DATE.format(date);
+}

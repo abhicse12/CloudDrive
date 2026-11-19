@@ -74,6 +74,11 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('./pages/DashboardPage.jsx'), 'DashboardPage'),
               },
               {
+                // :folderId? = optional: /app/files is the root, /app/files/<id> a folder.
+                path: 'files/:folderId?',
+                lazy: page(() => import('./pages/FilesPage.jsx'), 'FilesPage'),
+              },
+              {
                 path: 'settings',
                 lazy: page(() => import('./pages/SettingsPage.jsx'), 'SettingsPage'),
               },

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { ThemeToggle } from '../../components/common/ThemeToggle.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
+import { SearchBox } from './SearchBox.jsx';
 import { Toaster } from '../../components/ui/Toaster.jsx';
 import { Sidebar } from './Sidebar.jsx';
 import { UserMenu } from './UserMenu.jsx';
@@ -64,7 +65,11 @@ export function AppLayout() {
             <Logo showText={false} />
           </span>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <SearchBox />
+          </div>
+
+          <div className="flex items-center gap-3">
             <ThemeToggle />
             <UserMenu />
           </div>
