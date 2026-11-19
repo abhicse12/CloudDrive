@@ -42,3 +42,15 @@ export function toFolderDto(folder) {
     deletedAt: folder.deletedAt,
   };
 }
+
+/** metadata is a snapshot written by our own services (names, sizes), never user JSON. */
+export function toActivityDto(entry) {
+  return {
+    id: entry.id,
+    action: entry.action,
+    targetType: entry.targetType,
+    targetId: entry.targetId,
+    metadata: entry.metadata ?? {},
+    createdAt: entry.createdAt,
+  };
+}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { env } from '../config/env.js';
 import { authRouter } from './auth.routes.js';
+import { dashboardRouter } from './dashboard.routes.js';
 import { fileRouter } from './file.routes.js';
 import { folderRouter } from './folder.routes.js';
 import { healthRouter } from './health.routes.js';
@@ -15,4 +16,5 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/folders', folderRouter);
 apiRouter.use('/files', fileRouter);
 apiRouter.use('/trash', trashRouter);
+apiRouter.use('/dashboard', dashboardRouter);
 if (env.STORAGE_DRIVER === 'local') apiRouter.use('/storage', storageRouter);

@@ -96,24 +96,33 @@ Defined and validated in [server/src/config/env.js](server/src/config/env.js). T
 refuses to start if any value is missing or invalid. See
 [server/.env.example](server/.env.example) for every variable with a placeholder.
 
-| Variable                              | Default                 | Purpose                                               |
-| ------------------------------------- | ----------------------- | ----------------------------------------------------- |
-| `NODE_ENV`                            | `development`           | `development`, `test` or `production`                 |
-| `PORT`                                | `4000`                  | API port                                              |
-| `LOG_LEVEL`                           | `info`                  | pino log level                                        |
-| `DATABASE_URL`                        | -                       | PostgreSQL connection URL (required)                  |
-| `CORS_ORIGINS`                        | `http://localhost:5173` | Comma-separated allowed browser origins               |
-| `TRUST_PROXY`                         | `0`                     | Proxies in front of the API (1 behind an AWS ALB)     |
-| `JWT_ACCESS_SECRET`                   | -                       | Signs access tokens; 32+ random characters (required) |
-| `JWT_ACCESS_TTL_SECONDS`              | `900`                   | Access token lifetime (15 min)                        |
-| `REFRESH_TOKEN_TTL_DAYS`              | `7`                     | Refresh token lifetime, renewed on use                |
-| `BCRYPT_ROUNDS`                       | `12`                    | Password hashing cost (min 12 in production)          |
-| `COOKIE_SECURE`                       | `false`                 | HTTPS-only cookies (must be `true` in production)     |
-| `PASSWORD_RESET_TTL_MINUTES`          | `30`                    | Reset link lifetime                                   |
-| `APP_URL`                             | `http://localhost:5173` | Web app URL used in email links                       |
-| `EMAIL_PROVIDER`                      | `console`               | `console` prints emails to the log                    |
-| `DEFAULT_STORAGE_LIMIT_BYTES`         | `5368709120`            | New user quota (5 GiB)                                |
-| `ADMIN_EMAIL` / `_NAME` / `_PASSWORD` | -                       | Used only by `db:seed`                                |
+| Variable                              | Default                 | Purpose                                                |
+| ------------------------------------- | ----------------------- | ------------------------------------------------------ |
+| `NODE_ENV`                            | `development`           | `development`, `test` or `production`                  |
+| `PORT`                                | `4000`                  | API port                                               |
+| `LOG_LEVEL`                           | `info`                  | pino log level                                         |
+| `DATABASE_URL`                        | -                       | PostgreSQL connection URL (required)                   |
+| `CORS_ORIGINS`                        | `http://localhost:5173` | Comma-separated allowed browser origins                |
+| `TRUST_PROXY`                         | `0`                     | Proxies in front of the API (1 behind an AWS ALB)      |
+| `JWT_ACCESS_SECRET`                   | -                       | Signs access tokens; 32+ random characters (required)  |
+| `JWT_ACCESS_TTL_SECONDS`              | `900`                   | Access token lifetime (15 min)                         |
+| `REFRESH_TOKEN_TTL_DAYS`              | `7`                     | Refresh token lifetime, renewed on use                 |
+| `BCRYPT_ROUNDS`                       | `12`                    | Password hashing cost (min 12 in production)           |
+| `COOKIE_SECURE`                       | `false`                 | HTTPS-only cookies (must be `true` in production)      |
+| `PASSWORD_RESET_TTL_MINUTES`          | `30`                    | Reset link lifetime                                    |
+| `APP_URL`                             | `http://localhost:5173` | Web app URL used in email links                        |
+| `EMAIL_PROVIDER`                      | `console`               | `console` prints emails to the log                     |
+| `DEFAULT_STORAGE_LIMIT_BYTES`         | `5368709120`            | New user quota (5 GiB)                                 |
+| `STORAGE_DRIVER`                      | `local`                 | Where file bytes live (`local` now, S3 in Phase 8)     |
+| `STORAGE_LOCAL_ROOT`                  | `./storage-data`        | Local storage folder (relative to `server/`)           |
+| `UPLOAD_TMP_DIR`                      | `./tmp-uploads`         | Temp folder for uploads in progress                    |
+| `STORAGE_SIGNING_SECRET`              | -                       | Signs download links; 32+ random characters (required) |
+| `SIGNED_URL_TTL_SECONDS`              | `300`                   | Download link lifetime (5 min)                         |
+| `MAX_FILE_SIZE_MB`                    | `100`                   | Largest single file                                    |
+| `MAX_FILES_PER_UPLOAD`                | `20`                    | Files per upload request                               |
+| `TRASH_RETENTION_DAYS`                | `30`                    | Trash is emptied automatically after this              |
+| `JOBS_ENABLED`                        | `true`                  | Run background cleanup jobs in the API process         |
+| `ADMIN_EMAIL` / `_NAME` / `_PASSWORD` | -                       | Used only by `db:seed`                                 |
 
 ## Project structure
 
@@ -123,19 +132,21 @@ clouddrive/
 ├── docs/                     Architecture and planning docs
 ├── server/                   REST API
 │   ├── prisma/               Schema, migrations (incl. hand-written SQL constraints), seed
-│   ├── tests/                API tests (auth, security, account, health)
+│   ├── tests/                API tests (auth, files, uploads, folders, trash, jobs, ...)
 │   └── src/
 │       ├── app.js            Express app + middleware order
-│       ├── server.js         Startup and graceful shutdown
+│       ├── server.js         Startup, background jobs and graceful shutdown
 │       ├── config/           env validation, logger, Prisma client
 │       ├── routes/           URL → middleware → controller
 │       ├── controllers/      HTTP in/out only
-│       ├── services/         Business rules (auth, account, tokens)
-│       ├── repositories/     Database queries
-│       ├── middleware/       auth, roles, CSRF, rate limits, validation, errors
+│       ├── services/         Business rules (auth, files, uploads, folders, trash, dashboard)
+│       ├── repositories/     Database queries (always scoped to the user)
+│       ├── middleware/       auth, roles, CSRF, rate limits, validation, uploads, errors
 │       ├── validators/       Zod request schemas
+│       ├── storage/          StorageProvider interface + local disk (S3 later)
+│       ├── jobs/             Cleanup jobs and their scheduler
 │       ├── email/            Email provider interface (console now, SES later)
-│       └── utils/            AppError, cookies, DTOs
+│       └── utils/            AppError, cookies, DTOs, file types, pagination
 └── client/                   React web app
     └── src/
         ├── router.jsx        Routes (lazy-loaded pages) and guards
@@ -163,7 +174,7 @@ State-changing requests (`POST`, `PATCH`, `DELETE`) must send the CSRF token fro
 | Method | Path                        | Auth | Description                                      |
 | ------ | --------------------------- | ---- | ------------------------------------------------ |
 | GET    | `/api/health`               | -    | Liveness: the process is running                 |
-| GET    | `/api/health/ready`         | -    | Readiness: the database is reachable (else 503)  |
+| GET    | `/api/health/ready`         | -    | Readiness: database and storage OK (else 503)    |
 | GET    | `/api/auth/csrf`            | -    | Issue CSRF token (cookie + body)                 |
 | POST   | `/api/auth/register`        | -    | Create account and log in                        |
 | POST   | `/api/auth/login`           | -    | Log in                                           |
@@ -174,5 +185,33 @@ State-changing requests (`POST`, `PATCH`, `DELETE`) must send the CSRF token fro
 | POST   | `/api/auth/change-password` | ✔    | Change password, log out other devices           |
 | POST   | `/api/auth/forgot-password` | -    | Email a reset link (same response for any email) |
 | POST   | `/api/auth/reset-password`  | -    | Set new password from link, log out every device |
+
+**Files, folders, trash and dashboard** (all require login; another user's items always
+return 404):
+
+| Method | Path                          | Description                                                             |
+| ------ | ----------------------------- | ----------------------------------------------------------------------- |
+| GET    | `/api/folders?parentId=`      | Subfolders (no `parentId` = root)                                       |
+| GET    | `/api/folders/tree`           | Every folder, for the "Move to…" picker                                 |
+| POST   | `/api/folders`                | Create `{ name, parentId? }`                                            |
+| GET    | `/api/folders/:id`            | Folder + breadcrumbs                                                    |
+| PATCH  | `/api/folders/:id`            | Rename and/or move `{ name?, parentId? }`                               |
+| DELETE | `/api/folders/:id`            | Move folder and its contents to trash                                   |
+| POST   | `/api/folders/:id/restore`    | Restore with everything trashed along with it                           |
+| DELETE | `/api/folders/:id/permanent`  | Delete forever (must be in trash)                                       |
+| GET    | `/api/files`                  | `folderId` (or `all`), `q`, `category`, sort, `page`/`pageSize`         |
+| POST   | `/api/files/upload`           | Multipart `files` (≤ 20) + `folderId?`; per-file results                |
+| GET    | `/api/files/:id`              | File + breadcrumbs                                                      |
+| GET    | `/api/files/:id/download`     | 5-minute signed link; `disposition=inline\|attachment`, `redirect=true` |
+| PATCH  | `/api/files/:id`              | Rename and/or move `{ name?, folderId? }`                               |
+| DELETE | `/api/files/:id`              | Move to trash                                                           |
+| POST   | `/api/files/:id/restore`      | Restore from trash                                                      |
+| DELETE | `/api/files/:id/permanent`    | Delete forever (must be in trash)                                       |
+| POST   | `/api/files/bulk`             | `{ action: trash\|restore\|move\|delete, ids[], folderId? }`            |
+| GET    | `/api/trash`                  | Top-level trashed folders and files, with purge dates                   |
+| DELETE | `/api/trash`                  | Empty trash                                                             |
+| GET    | `/api/dashboard/stats`        | Storage used/limit, usage by category, trash size                       |
+| GET    | `/api/dashboard/recent-files` | Newest files (`limit`, default 8)                                       |
+| GET    | `/api/dashboard/activity`     | Activity feed (`limit`, `cursor` → `nextCursor`)                        |
 
 The complete planned API is in [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md#6-api-design).
