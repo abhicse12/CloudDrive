@@ -33,4 +33,19 @@ export const folderController = {
     );
     res.json({ success: true, data: { folder: toFolderDto(folder) } });
   },
+
+  async trash(req, res) {
+    await folderService.trash(req.auth.userId, req.validated.params.id);
+    res.status(204).end();
+  },
+
+  async restore(req, res) {
+    const folder = await folderService.restore(req.auth.userId, req.validated.params.id);
+    res.json({ success: true, data: { folder: toFolderDto(folder) } });
+  },
+
+  async deletePermanently(req, res) {
+    const result = await folderService.deletePermanently(req.auth.userId, req.validated.params.id);
+    res.json({ success: true, data: result });
+  },
 };

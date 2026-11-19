@@ -27,6 +27,8 @@ export function toFileDto(file) {
     size: Number(file.sizeBytes),
     createdAt: file.createdAt,
     updatedAt: file.updatedAt,
+    // null unless in trash
+    deletedAt: file.deletedAt,
   };
 }
 
@@ -37,5 +39,6 @@ export function toFolderDto(folder) {
     parentId: folder.parentId,
     createdAt: folder.createdAt,
     updatedAt: folder.updatedAt,
+    deletedAt: folder.deletedAt,
   };
 }

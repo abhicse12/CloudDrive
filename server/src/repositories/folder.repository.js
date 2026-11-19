@@ -74,4 +74,57 @@ export const folderRepository = {
       SELECT id FROM tree`;
     return rows.map((row) => row.id);
   },
+
+  /** A folder of the user's that is in the trash, or null. */
+  findOwnedTrashed(userId, id) {
+    return prisma.folder.findFirst({ where: { id, userId, deletedAt: { not: null } } });
+  },
+
+  /**
+   * Sets deletedAt on the given folders AND the files inside them, but only on rows
+   * whose deletedAt is currently `from`:
+   *   trash:   from = null → to = T      (items already in trash keep their own time)
+   *   restore: from = T    → to = null   (only what was trashed TOGETHER comes back)
+   */
+  async setSubtreeDeletedAt(ids, { from, to }, db = prisma) {
+    await db.folder.updateMany({
+      where: { id: { in: ids }, deletedAt: from },
+      data: { deletedAt: to },
+    });
+    // Every file status: an upload finishing inside a trashed folder must stay hidden.
+    await db.file.updateMany({
+      where: { folderId: { in: ids }, deletedAt: from },
+      data: { deletedAt: to },
+    });
+  },
+
+  /** Is there an ACTIVE folder with this name (any case) in that parent? */
+  async nameTaken(userId, parentId, name, db = prisma) {
+    const clash = await db.folder.findFirst({
+      where: { userId, parentId, deletedAt: null, name: { equals: name, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    return clash !== null;
+  },
+
+  /** Deletes the folder row; the database cascades to every subfolder (parent FK). */
+  async deleteOwned(userId, id, db = prisma) {
+    const { count } = await db.folder.deleteMany({ where: { id, userId } });
+    return count;
+  },
+
+  /**
+   * Trashed folders whose parent is NOT trashed: the ones the trash page shows.
+   * (A folder trashed together with its parent appears inside that parent instead.)
+   */
+  listTrashedTopLevel(userId) {
+    return prisma.folder.findMany({
+      where: {
+        userId,
+        deletedAt: { not: null },
+        OR: [{ parentId: null }, { parent: { deletedAt: null } }],
+      },
+      orderBy: [{ deletedAt: 'desc' }, { id: 'asc' }],
+    });
+  },
 };

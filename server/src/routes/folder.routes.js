@@ -24,3 +24,10 @@ folderRouter.patch(
   validate({ params: idParams, body: updateFolderBody }),
   folderController.update,
 );
+folderRouter.delete('/:id', validate({ params: idParams }), folderController.trash);
+folderRouter.post('/:id/restore', validate({ params: idParams }), folderController.restore);
+folderRouter.delete(
+  '/:id/permanent',
+  validate({ params: idParams }),
+  folderController.deletePermanently,
+);

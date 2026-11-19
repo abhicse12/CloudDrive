@@ -97,6 +97,47 @@ export const fileRepository = {
     return count;
   },
 
+  /** Every file (any status) inside the given folders: for permanent folder delete. */
+  findInFolders(userId, folderIds) {
+    return prisma.file.findMany({
+      where: { userId, folderId: { in: folderIds } },
+      select: { ...SUMMARY, status: true },
+    });
+  },
+
+  /**
+   * Deletes the rows and returns the ones THIS call deleted (DELETE ... RETURNING), so
+   * the caller frees exactly their bytes, even if a parallel request deleted some first.
+   */
+  deleteManyReturning(userId, ids, db = prisma) {
+    return db.$queryRaw`
+      DELETE FROM files
+      WHERE user_id = ${userId}::uuid AND id = ANY(${ids}::uuid[])
+      RETURNING id, size_bytes AS "sizeBytes", status::text AS status`;
+  },
+
+  /** Trashed files whose folder is NOT trashed (the trash page), newest first. */
+  async listTrashedTopLevel(userId, { skip, take }) {
+    const where = {
+      userId,
+      ...FILE_STATE.trashed,
+      OR: [{ folderId: null }, { folder: { deletedAt: null } }],
+    };
+    const [files, total] = await prisma.$transaction([
+      prisma.file.findMany({ where, orderBy: [{ deletedAt: 'desc' }, { id: 'asc' }], skip, take }),
+      prisma.file.count({ where }),
+    ]);
+    return { files, total };
+  },
+
+  async trashedIds(userId) {
+    const rows = await prisma.file.findMany({
+      where: { userId, ...FILE_STATE.trashed },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  },
+
   /**
    * One page of files plus the total count, in one transaction so they agree.
    * folderId: a UUID or null (the root); undefined = every folder (search).

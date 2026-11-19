@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { prisma } from './config/prisma.js';
+import { startJobs } from './jobs/scheduler.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -10,6 +11,9 @@ const app = createApp();
 const server = app.listen(env.PORT, () => {
   logger.info(`CloudDrive API listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);
 });
+
+// Cleanup jobs (stale uploads, trash purge, temp files, old sessions).
+const stopJobs = env.JOBS_ENABLED ? startJobs() : async () => {};
 
 server.on('error', (err) => {
   logger.fatal({ err }, 'Server failed to start');
@@ -35,6 +39,8 @@ function shutdown(signal) {
 
   server.close(async (err) => {
     if (err) logger.error({ err }, 'Error while closing HTTP server');
+    // Let a running cleanup job finish before the database goes away.
+    await stopJobs();
     // Return database connections to PostgreSQL instead of dropping them.
     await prisma.$disconnect();
     logger.info('Shutdown complete');

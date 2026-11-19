@@ -1,5 +1,8 @@
+import { prisma } from '../config/prisma.js';
 import { activityRepository } from '../repositories/activity.repository.js';
+import { fileRepository } from '../repositories/file.repository.js';
 import { folderRepository } from '../repositories/folder.repository.js';
+import { storage } from '../storage/index.js';
 import { AppError } from '../utils/AppError.js';
 
 const folderNotFound = () => AppError.notFound('Folder not found.');
@@ -102,4 +105,126 @@ export const folderService = {
     });
     return updated;
   },
+
+  /**
+   * Moves the folder and everything inside it to the trash, in one transaction, all
+   * stamped with the SAME deletedAt. That shared timestamp is what restore uses to tell
+   * "trashed together with this folder" from "was already in the trash before".
+   */
+  async trash(userId, id) {
+    const folder = await folderRepository.findOwned(userId, id);
+    if (!folder) throw folderNotFound();
+
+    const deletedAt = new Date();
+    await prisma.$transaction(async (tx) => {
+      const ids = await folderRepository.subtreeIds(userId, id, tx);
+      await folderRepository.setSubtreeDeletedAt(ids, { from: null, to: deletedAt }, tx);
+      await activityRepository.record(
+        {
+          userId,
+          action: 'FOLDER_TRASHED',
+          targetType: 'FOLDER',
+          targetId: id,
+          metadata: { name: folder.name },
+        },
+        tx,
+      );
+    });
+  },
+
+  /**
+   * Brings back the folder and whatever was trashed WITH it (same deletedAt).
+   * - Its parent is gone or in the trash → it comes back at the root.
+   * - Its name is now taken there → "Name (restored)", "Name (restored 2)", ...
+   */
+  async restore(userId, id) {
+    const folder = await folderRepository.findOwnedTrashed(userId, id);
+    if (!folder) throw folderNotFound();
+    const trashedAt = folder.deletedAt;
+
+    return withNameCheck(() =>
+      prisma.$transaction(async (tx) => {
+        const parentActive =
+          folder.parentId && (await folderRepository.findOwned(userId, folder.parentId, tx));
+        const parentId = parentActive ? folder.parentId : null;
+        const name = await freeName(userId, parentId, folder.name, tx);
+
+        // Place it first (while still trashed, so it can't clash), then un-trash.
+        await tx.folder.update({ where: { id }, data: { parentId, name } });
+        const ids = await folderRepository.subtreeIds(userId, id, tx);
+        await folderRepository.setSubtreeDeletedAt(ids, { from: trashedAt, to: null }, tx);
+
+        await activityRepository.record(
+          {
+            userId,
+            action: 'FOLDER_RESTORED',
+            targetType: 'FOLDER',
+            targetId: id,
+            metadata: { name, ...(name !== folder.name && { previousName: folder.name }) },
+          },
+          tx,
+        );
+        return tx.folder.findUnique({ where: { id } });
+      }),
+    );
+  },
+
+  /**
+   * Deletes a trashed folder for good: every file's bytes, every file row, every
+   * subfolder. Same order as for files: bytes first, so a failure part-way leaves
+   * rows that a retry can finish, never bytes that nothing points to.
+   * Returns { files, bytes } freed.
+   */
+  async deletePermanently(userId, id) {
+    const folder = await folderRepository.findOwnedTrashed(userId, id);
+    if (!folder) throw folderNotFound();
+
+    const folderIds = await folderRepository.subtreeIds(userId, id);
+    const files = await fileRepository.findInFolders(userId, folderIds);
+    if (files.some((file) => file.status === 'UPLOADING')) {
+      throw new AppError(409, 'UPLOAD_IN_PROGRESS', 'Wait for uploads in this folder to finish.');
+    }
+
+    for (const file of files) await storage.delete(file.storageKey);
+
+    return prisma.$transaction(async (tx) => {
+      const deleted = files.length
+        ? await fileRepository.deleteManyReturning(
+            userId,
+            files.map((file) => file.id),
+            tx,
+          )
+        : [];
+      // FAILED uploads already gave their bytes back.
+      const bytes = deleted
+        .filter((row) => row.status !== 'FAILED')
+        .reduce((sum, row) => sum + BigInt(row.sizeBytes), 0n);
+      if (bytes > 0n) await fileRepository.releaseQuota(userId, bytes, tx);
+
+      // 0 = a parallel request already deleted it; report nothing freed twice.
+      if ((await folderRepository.deleteOwned(userId, id, tx)) === 0) throw folderNotFound();
+      await activityRepository.record(
+        {
+          userId,
+          action: 'FOLDER_DELETED',
+          targetType: 'FOLDER',
+          targetId: id,
+          metadata: { name: folder.name, files: deleted.length, size: Number(bytes) },
+        },
+        tx,
+      );
+      return { files: deleted.length, bytes: Number(bytes) };
+    });
+  },
 };
+
+/** "Photos" → "Photos (restored)" → "Photos (restored 2)" ... until it's free. */
+async function freeName(userId, parentId, name, db) {
+  for (let attempt = 1; attempt <= 100; attempt += 1) {
+    const suffix =
+      attempt === 1 ? '' : attempt === 2 ? ' (restored)' : ` (restored ${attempt - 1})`;
+    const candidate = name.slice(0, 255 - suffix.length) + suffix;
+    if (!(await folderRepository.nameTaken(userId, parentId, candidate, db))) return candidate;
+  }
+  throw nameTaken();
+}
