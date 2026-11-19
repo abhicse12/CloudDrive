@@ -7,4 +7,10 @@ export const activityRepository = {
       data: { userId, action, targetType, targetId, metadata },
     });
   },
+
+  /** Several events in one INSERT (bulk actions). */
+  recordMany(entries, db = prisma) {
+    if (entries.length === 0) return Promise.resolve({ count: 0 });
+    return db.activityLog.createMany({ data: entries });
+  },
 };
