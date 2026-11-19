@@ -10,7 +10,13 @@ function axiosBaseQuery() {
   return async ({ url, method = 'GET', data, params }) => {
     try {
       const response = await apiClient({ url, method, data, params });
-      return { data: response.data?.data ?? null }; // 204 No Content → null
+      const body = response.data;
+      // Paginated lists also send `meta` ({ page, totalPages, ... }) next to `data`.
+      // Keep it: "Load more" needs to know whether there is a next page.
+      if (body?.meta && body.data && typeof body.data === 'object') {
+        return { data: { ...body.data, meta: body.meta } };
+      }
+      return { data: body?.data ?? null }; // 204 No Content → null
     } catch (error) {
       return { error: toApiError(error) };
     }
@@ -26,6 +32,8 @@ function axiosBaseQuery() {
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery(),
-  tagTypes: ['Me'],
+  // File/Folder: browsing lists. Trash: the trash page. Stats: storage numbers.
+  // Activity: the dashboard feed. See features/files/cacheTags.js for who refreshes what.
+  tagTypes: ['Me', 'File', 'Folder', 'Trash', 'Stats', 'Activity'],
   endpoints: () => ({}),
 });

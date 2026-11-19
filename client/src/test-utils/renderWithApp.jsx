@@ -16,15 +16,17 @@ export function mockApi(routes) {
   const calls = [];
   apiClient.defaults.adapter = async (config) => {
     const key = `${config.method.toUpperCase()} ${config.url}`;
-    const body = config.data ? JSON.parse(config.data) : undefined;
-    calls.push({ key, body });
+    // JSON bodies arrive as strings; FormData (uploads) is passed through as-is.
+    const body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
+    const params = config.params ?? {};
+    calls.push({ key, body, params });
 
     const handler =
       key === 'GET /auth/csrf'
         ? () => ({ data: { success: true, data: { csrfToken: 'csrf-test' } } })
         : routes[key];
     const { status = 200, data = { success: true, data: null } } = handler
-      ? handler(body)
+      ? handler(body, params)
       : { status: 404, data: { error: { code: 'NOT_FOUND', message: 'Not found' } } };
 
     const response = { data, status, statusText: String(status), headers: {}, config };

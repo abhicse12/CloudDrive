@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { ThemeToggle } from '../../components/common/ThemeToggle.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
+import { Toaster } from '../../components/ui/Toaster.jsx';
 import { Sidebar } from './Sidebar.jsx';
 import { UserMenu } from './UserMenu.jsx';
 
@@ -73,6 +74,9 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Notifications for the whole app (toast.success(...) from anywhere). */}
+      <Toaster />
     </div>
   );
 }
