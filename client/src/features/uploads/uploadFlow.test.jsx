@@ -123,9 +123,11 @@ describe('new folder', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'New' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'New folder' }));
-    fireEvent.change(await screen.findByLabelText('Folder name'), {
-      target: { value: '  Reports  ' },
-    });
+    const input = await screen.findByLabelText('Folder name');
+    // Focused with the default name fully selected, so typing replaces it.
+    expect(document.activeElement).toBe(input);
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 'Untitled folder'.length]);
+    fireEvent.change(input, { target: { value: '  Reports  ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() =>

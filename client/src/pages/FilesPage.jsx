@@ -3,13 +3,12 @@ import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Link } from 'react-router';
 import { Breadcrumbs } from '../components/files/Breadcrumbs.jsx';
-import { FileGrid, FileTable } from '../components/files/FileViews.jsx';
-import { FolderCard } from '../components/files/FolderCard.jsx';
 import { CATEGORIES } from '../components/files/fileCategories.js';
 import { Button, ButtonLink } from '../components/ui/Button.jsx';
 import { buttonClasses } from '../components/ui/buttonClasses.js';
 import { DropdownMenu } from '../components/ui/DropdownMenu.jsx';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/States.jsx';
+import { FileBrowser } from '../features/files/FileBrowser.jsx';
 import { FilesToolbar } from '../features/files/FilesToolbar.jsx';
 import { NewFolderDialog } from '../features/files/NewFolderDialog.jsx';
 import {
@@ -130,82 +129,60 @@ export function FilesPage() {
         parentId={folderId}
       />
 
-      <div className="mt-4">
-        <FilesToolbar
-          params={params}
-          onChange={updateParams}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-        />
-      </div>
-
       <DropOverlay onFiles={uploadDropped} targetName={target.folderName}>
-        <div className="mt-6 min-h-64 space-y-8">
-          {loading ? (
-            <LoadingState viewMode={viewMode} />
-          ) : failed ? (
-            <ErrorState
-              title="Couldn't load your files"
-              error={failed}
-              onRetry={() => {
-                files.refetch();
-                if (showFolders) folders.refetch();
-              }}
+        <FileBrowser
+          folders={folderList}
+          files={fileList}
+          viewMode={viewMode}
+          // A new folder/search/filter = a new list: the selection starts empty.
+          scope={`${folderId}|${q}|${category}`}
+          currentFolderId={searching ? undefined : folderId}
+          toolbar={
+            <FilesToolbar
+              params={params}
+              onChange={updateParams}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
             />
-          ) : folderList.length === 0 && fileList.length === 0 ? (
-            <NothingHere
-              searching={searching}
-              q={q}
-              category={category}
-              onUpload={openUploadDialog}
-            />
-          ) : (
-            <>
-              {folderList.length > 0 && (
-                <section aria-labelledby="folders-heading">
-                  <h2 id="folders-heading" className="mb-3 text-sm font-medium text-fg-muted">
-                    Folders
-                  </h2>
-                  <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                    {folderList.map((item) => (
-                      <li key={item.id} className="min-w-0">
-                        <FolderCard folder={item} />
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+          }
+          placeholder={
+            loading ? (
+              <LoadingState viewMode={viewMode} />
+            ) : failed ? (
+              <ErrorState
+                title="Couldn't load your files"
+                error={failed}
+                onRetry={() => {
+                  files.refetch();
+                  if (showFolders) folders.refetch();
+                }}
+              />
+            ) : folderList.length === 0 && fileList.length === 0 ? (
+              <NothingHere
+                searching={searching}
+                q={q}
+                category={category}
+                onUpload={openUploadDialog}
+              />
+            ) : null
+          }
+          filesFooter={
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <p className="text-xs text-fg-subtle">
+                Showing {fileList.length} of {totalFiles} files
+              </p>
+              {files.hasNextPage && (
+                <Button
+                  variant="secondary"
+                  onClick={() => files.fetchNextPage()}
+                  loading={files.isFetchingNextPage}
+                >
+                  Load more
+                </Button>
               )}
-
-              {fileList.length > 0 && (
-                <section aria-labelledby="files-heading">
-                  <h2 id="files-heading" className="mb-3 text-sm font-medium text-fg-muted">
-                    Files
-                  </h2>
-                  {viewMode === 'list' ? (
-                    <FileTable files={fileList} />
-                  ) : (
-                    <FileGrid files={fileList} />
-                  )}
-
-                  <div className="mt-6 flex flex-col items-center gap-2">
-                    <p className="text-xs text-fg-subtle">
-                      Showing {fileList.length} of {totalFiles} files
-                    </p>
-                    {files.hasNextPage && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => files.fetchNextPage()}
-                        loading={files.isFetchingNextPage}
-                      >
-                        Load more
-                      </Button>
-                    )}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </div>
+            </div>
+          }
+        />
       </DropOverlay>
     </div>
   );
@@ -250,7 +227,7 @@ function LoadingState({ viewMode }) {
     <div aria-busy="true" aria-label="Loading files">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {Array.from({ length: viewMode === 'list' ? 0 : 10 }, (_, i) => (
-          <Skeleton key={i} className="aspect-[4/4] rounded-2xl" />
+          <Skeleton key={i} className="aspect-square rounded-2xl" />
         ))}
       </div>
       {viewMode === 'list' &&

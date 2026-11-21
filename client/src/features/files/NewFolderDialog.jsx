@@ -9,6 +9,7 @@ import { toast } from '../../components/ui/toast.js';
 import { applyApiError } from '../../utils/formErrors.js';
 import { useCreateFolderMutation } from './filesApi.js';
 import { nameFormSchema } from './schemas.js';
+import { useNameField } from './useNameField.js';
 
 export function NewFolderDialog({ open, onClose, parentId }) {
   return (
@@ -31,6 +32,8 @@ function NewFolderForm({ parentId, onDone }) {
     resolver: zodResolver(nameFormSchema),
     defaultValues: { name: 'Untitled folder' },
   });
+  // Focused with "Untitled folder" selected, so typing replaces it.
+  const nameField = useNameField(register);
 
   async function onSubmit({ name }) {
     setFormError(null);
@@ -47,14 +50,7 @@ function NewFolderForm({ parentId, onDone }) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
       {formError && <Alert>{formError}</Alert>}
-      <Input
-        label="Folder name"
-        autoFocus
-        // Select the default name, so typing replaces it.
-        onFocus={(event) => event.target.select()}
-        error={errors.name?.message}
-        {...register('name')}
-      />
+      <Input label="Folder name" error={errors.name?.message} {...nameField} />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onDone}>
           Cancel
