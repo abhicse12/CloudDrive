@@ -80,7 +80,8 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Production quality: security first, clean layers (routes → controllers → services → repositories).
 - Every step ends with a deliberate **"break it" check**: disable the key guard, confirm a test fails, restore it.
 - Don't overwrite files without reading them; never hard-code AWS credentials; never expose secrets to the frontend.
-- No GitHub remote yet: ask the user for the repo URL before any push.
+- Code lives on GitHub: `origin` = https://github.com/abhicse12/CloudDrive (Phases 1–5 pushed).
+  Ask before pushing; the user often pushes from their own terminal.
 
 ### 0.5 Gotchas learned (save time)
 
