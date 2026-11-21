@@ -81,6 +81,21 @@ describe('GET /api/storage/:token (signed URLs)', () => {
     expect(res.headers['cache-control']).toBe('no-store');
   });
 
+  it('sends a file-specific security policy: nothing runs, only our pages may embed it', async () => {
+    const { key } = await storeFile('%PDF-1.4\n%%EOF\n');
+
+    const res = await request(app).get(
+      await signedUrl(key, { contentType: 'application/pdf', filename: 'a.pdf' }),
+    );
+
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toContain("default-src 'none'"); // no scripts, styles or fetches from the file
+    expect(csp).toContain("frame-ancestors 'self'"); // only CloudDrive may show it in a frame
+    expect(csp).toContain("object-src 'self'"); // Chrome's PDF viewer needs this
+    expect(csp).not.toContain('script-src');
+    expect(res.headers['x-frame-options']).toBe('SAMEORIGIN');
+  });
+
   it('forces download for HTML even if the link asks for inline (no stored XSS)', async () => {
     const { key } = await storeFile('<script>alert(1)</script>');
 

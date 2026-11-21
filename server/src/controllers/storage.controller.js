@@ -4,6 +4,22 @@ import { contentDisposition } from '../utils/contentDisposition.js';
 import { inlineContentType, isInlineSafe } from '../utils/fileTypes.js';
 
 /**
+ * Security policy for file bytes, replacing helmet's page-oriented default.
+ * Stricter overall: nothing may load or run (default-src 'none'). Allowed only:
+ * our own images/media, and object-src 'self' because Chrome's built-in PDF viewer is
+ * an embedded plugin that `object-src 'none'` would leave blank. Only our own pages
+ * may embed the file (the preview modal). HTML/SVG never get here inline anyway.
+ */
+const FILE_CSP = [
+  "default-src 'none'",
+  "img-src 'self'",
+  "media-src 'self'",
+  "style-src 'unsafe-inline'",
+  "object-src 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+/**
  * GET /api/storage/:token - serves a file from a signed URL (local storage only).
  *
  * No login is needed here: the signature IS the permission, issued moments earlier by
@@ -22,6 +38,7 @@ export async function serveSignedFile(req, res) {
     'Content-Type': inline ? inlineContentType(grant.t) : grant.t || 'application/octet-stream',
     'Content-Disposition': contentDisposition(inline ? 'inline' : 'attachment', grant.n),
     'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': FILE_CSP,
   });
 
   // sendFile streams the file and supports HTTP Range requests, which is what lets a

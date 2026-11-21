@@ -30,6 +30,16 @@ export const filesApi = baseApi.injectEndpoints({
       providesTags: ['File'],
     }),
 
+    /**
+     * A signed link for previewing: { url, disposition, expiresAt }. Links expire after
+     * a few minutes, so cached ones are dropped quickly and every opening fetches anew.
+     * `disposition` in the answer may be 'attachment' if the type can't be shown.
+     */
+    getPreviewLink: build.query({
+      query: (id) => ({ url: `/files/${id}/download`, params: { disposition: 'inline' } }),
+      keepUnusedDataFor: 30,
+    }),
+
     updateFile: build.mutation({
       query: ({ id, ...changes }) => ({ url: `/files/${id}`, method: 'PATCH', data: changes }),
       invalidatesTags: INVALIDATES.fileEdited,
@@ -107,6 +117,7 @@ export const filesApi = baseApi.injectEndpoints({
 export const {
   useGetFilesInfiniteQuery,
   useGetFileQuery,
+  useGetPreviewLinkQuery,
   useUpdateFileMutation,
   useTrashFileMutation,
   useRestoreFileMutation,

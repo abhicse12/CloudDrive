@@ -1,7 +1,13 @@
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 
-const SIZES = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-3xl' };
+const SIZES = {
+  sm: 'max-w-sm',
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-3xl',
+  full: 'max-w-5xl',
+};
 
 /**
  * Modal dialog built on the browser's native <dialog> + showModal(), which gives us

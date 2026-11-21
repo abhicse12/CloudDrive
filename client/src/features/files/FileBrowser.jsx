@@ -1,4 +1,4 @@
-import { FolderInput, FolderOpen, Pencil, Share2, Trash2 } from 'lucide-react';
+import { Download, Eye, FolderInput, FolderOpen, Pencil, Share2, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { FileGrid, FileTable } from '../../components/files/FileViews.jsx';
@@ -8,6 +8,8 @@ import { MoveDialog } from './MoveDialog.jsx';
 import { RenameDialog } from './RenameDialog.jsx';
 import { SelectionToolbar } from './SelectionToolbar.jsx';
 import { keyOf } from './selection.js';
+import { PreviewModal } from '../preview/PreviewModal.jsx';
+import { downloadFiles } from './download.js';
 import { useItemActions } from './useItemActions.js';
 import { useSelection } from './useSelection.js';
 
@@ -45,6 +47,7 @@ export function FileBrowser({
 
   const [dialog, setDialog] = useState(null); // { type: 'rename', item } | { type: 'move', items }
   const [contextMenu, setContextMenu] = useState(null); // { x, y, targets }
+  const [previewId, setPreviewId] = useState(null);
 
   // ⋯ / right-click on a selected item acts on the whole selection; on an unselected
   // one, only on that item (like Finder / Explorer / Drive).
@@ -53,8 +56,11 @@ export function FileBrowser({
 
   const open = (item) => {
     if (item.kind === 'folder') navigate(`/app/files/${item.id}`);
-    // Files: preview arrives in U5.
+    else setPreviewId(item.id);
   };
+
+  // Folders can't be downloaded (that would need a ZIP): offer Download for files only.
+  const onlyFiles = (targets) => targets.every((target) => target.kind === 'file');
 
   const trash = (targets) => {
     selection.clear();
@@ -64,8 +70,21 @@ export function FileBrowser({
   const menuFor = (targets) => {
     const single = targets.length === 1 ? targets[0] : null;
     return [
-      ...(single?.kind === 'folder'
-        ? [{ label: 'Open', Icon: FolderOpen, onSelect: () => open(single) }]
+      ...(single
+        ? [
+            single.kind === 'folder'
+              ? { label: 'Open', Icon: FolderOpen, onSelect: () => open(single) }
+              : { label: 'Preview', Icon: Eye, onSelect: () => open(single) },
+          ]
+        : []),
+      ...(onlyFiles(targets)
+        ? [
+            {
+              label: single ? 'Download' : `Download ${targets.length} files`,
+              Icon: Download,
+              onSelect: () => downloadFiles(targets),
+            },
+          ]
         : []),
       ...(single
         ? [
@@ -101,7 +120,7 @@ export function FileBrowser({
         range: event.shiftKey,
       }),
     onToggle: (range) => selection.toggle(keyOf(item), range),
-    onOpen: item.kind === 'folder' ? () => open(item) : undefined,
+    onOpen: () => open(item),
     onContextMenu: (event) => {
       event.preventDefault(); // our menu instead of the browser's
       const targets = targetsFor(item);
@@ -153,6 +172,7 @@ export function FileBrowser({
             onRename={() => setDialog({ type: 'rename', item: selectedItems[0] })}
             onMove={() => setDialog({ type: 'move', items: selectedItems })}
             onTrash={() => trash(selectedItems)}
+            onDownload={onlyFiles(selectedItems) ? () => downloadFiles(selectedItems) : undefined}
           />
         ) : (
           toolbar
@@ -210,6 +230,13 @@ export function FileBrowser({
         />
       )}
 
+      {/* ← → step through the files in this list, in the order shown. */}
+      <PreviewModal
+        files={files}
+        fileId={previewId}
+        onClose={() => setPreviewId(null)}
+        onNavigate={setPreviewId}
+      />
       <RenameDialog
         item={dialog?.type === 'rename' ? dialog.item : null}
         onClose={() => setDialog(null)}
