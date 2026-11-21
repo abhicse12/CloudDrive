@@ -1,10 +1,11 @@
 # CloudDrive — Phase 1: Planning & Architecture
 
-> Status: **Draft for review.** Nothing in Phase 2+ is built until this plan is confirmed.
-> Last updated: 2026-11-05
+> Status: **Plan confirmed. Phases 1–5 are built and committed.** Next: Phase 6.
+> Plan written 2026-11-05 · Progress section last updated 2026-11-22
 
 Contents
 
+0. [Progress & how to continue](#0-progress--how-to-continue) ← **start here in a new session**
 1. [Final requirements](#1-final-requirements)
 2. [Feature breakdown](#2-feature-breakdown)
 3. [Database design & ER diagram](#3-database-design--er-diagram)
@@ -17,6 +18,100 @@ Contents
 10. [AWS mapping (local → cloud)](#10-aws-mapping-local--cloud)
 11. [Development roadmap](#11-development-roadmap)
 12. [Decisions needing your confirmation](#12-decisions-needing-your-confirmation)
+
+---
+
+## 0. Progress & how to continue
+
+This section is the hand-off. A new session should read it first, then `README.md`
+(setup, scripts, env vars, full API table), then the plan sections it points to.
+
+### 0.1 Status by phase
+
+| Phase                         | Status      | What exists                                                                                         |
+| ----------------------------- | ----------- | --------------------------------------------------------------------------------------------------- |
+| 1. Planning                   | ✅ Done     | This document                                                                                       |
+| 2. Backend foundation         | ✅ Done     | Workspaces, Express 5, Prisma 7 + migrations, Docker Postgres, health checks, Vitest                |
+| 3+4. Auth + frontend (merged) | ✅ Done     | Cookie JWT + rotating refresh sessions, CSRF, rate limits; React app, auth pages, landing, settings |
+| 5A. Core backend (B1–B6)      | ✅ Done     | Storage layer, folders, uploads, file actions, trash + jobs, dashboard API                          |
+| 5B. Core frontend (U1–U6)     | ✅ Done     | My Files, uploads, selection/menus/move/rename, preview/download, Trash page, dashboard             |
+| **6. Sharing & admin**        | ⏭️ **Next** | Not started. See §5.3 (share flow), §6.2 (share + admin endpoints), §11 row 6                       |
+| 7. Testing & optimisation     | Not started | §11 row 7                                                                                           |
+| 8. AWS deployment             | Not started | §10, §11 row 8                                                                                      |
+
+Tests at the end of Phase 5: **220 server + 143 client, all passing**; lint and Prettier clean.
+
+### 0.2 Phase 5 steps and commits
+
+| Step  | Commit    | Delivered                                                                                                                                              |
+| ----- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| B1+B2 | `54e89fb` | `StorageProvider` + local disk with HMAC-signed URLs (Range support); folders API with breadcrumbs, loop-safe move; ICU collation for name sorting     |
+| B3    | `f7a9cc0` | Multer streaming upload, magic-byte type detection, atomic quota reservation, `UPLOADING → ACTIVE/FAILED`; file listing (search, filter, sort, paging) |
+| B4    | `8755c4d` | File details, signed download links, rename/move, trash/restore, permanent delete (bytes first), bulk actions                                          |
+| B5    | `6f215c4` | Folder trash/restore with shared subtree timestamp, trash page API, empty trash, in-process cleanup jobs                                               |
+| B6    | `f3ba91b` | Dashboard stats (one transaction), recent files, activity feed (ID cursor); README API table                                                           |
+| U1    | `42402ec` | RTK Query endpoints + cache tags; Dialog, DropdownMenu, Toaster, states, FileIcon                                                                      |
+| U2    | `b53b43f` | My Files page: breadcrumbs, grid/list, sort, type filters, search, Load more; URL holds the state                                                      |
+| U3    | `d3e23d7` | Upload queue (3 parallel, progress, real cancel), upload dialog, drag-and-drop, new folder; `GET /api/config`                                          |
+| U4    | `e82d6a0` | Selection (click/Ctrl/Shift), toolbar, ⋯ + right-click menus, rename, move dialog, trash with Undo, shortcuts                                          |
+| U5    | `d524958` | Preview (image, video, audio, PDF, text via Range), downloads; file-specific CSP on signed file responses                                              |
+| U6    | `58ac72a` | Trash page, dashboard widgets, live sidebar storage meter                                                                                              |
+
+### 0.3 Running it locally
+
+```bash
+docker compose up -d --wait   # Postgres: dev on 127.0.0.1:5434, test on 127.0.0.1:5433
+npm run dev                   # API on :4000, web app on :5173 (Vite proxies /api)
+npm test                      # all tests (server tests use the test DB on 5433)
+```
+
+- Port 5432 is taken by a native PostgreSQL 18 service on this machine; that's why dev uses **5434**.
+- **Docker Desktop does not start by itself after a reboot.** If tests fail with
+  `Can't reach database server at localhost:5433`, start Docker Desktop, then `docker compose up -d --wait`.
+- `server/.env` holds real local secrets and is git-ignored; `server/.env.example` lists every variable.
+- A local demo account exists in the dev database (its credentials are not stored in git).
+
+### 0.4 How we work (the user's standing rules)
+
+- Before each phase/step: inspect the workspace, show the plan (structure + steps), **wait for approval**.
+- Build incrementally. For each step: explain the purpose, create files, explain important code,
+  run tests, fix errors, then stop for approval. **Commit per step only when the user approves.**
+- Explain concepts in **Hinglish** in replies; code comments stay in English.
+- Production quality: security first, clean layers (routes → controllers → services → repositories).
+- Every step ends with a deliberate **"break it" check**: disable the key guard, confirm a test fails, restore it.
+- Don't overwrite files without reading them; never hard-code AWS credentials; never expose secrets to the frontend.
+- No GitHub remote yet: ask the user for the repo URL before any push.
+
+### 0.5 Gotchas learned (save time)
+
+- **Prisma `migrate dev` fails non-interactively.** Instead: `npx prisma migrate diff --from-config-datasource
+--to-schema prisma/schema.prisma --script` into a new `prisma/migrations/<UTC timestamp>_<name>/migration.sql`,
+  then `npx prisma migrate deploy`. CHECK constraints, partial/expression indexes, pg_trgm and ICU collation are hand-written SQL.
+- **Don't start a second Vite/API server when the user's `npm run dev` is running.** Check ports 5173/4000 first and
+  test against the running servers. A second Vite wiped the shared dep cache once (blank page, `504 Outdated Optimize Dep`;
+  fix: restart `npm run dev`, hard refresh).
+- In the Bash tool, scripts containing backticks or `${...}` get mangled; use the Edit tool for such changes.
+- Zod 4: use `.prefault()` (not `.default()`) when the default must pass through a transform.
+- React: `.jsx` files may only export components (react-refresh lint rule); helpers go in `.js` files.
+- Client tests: `mockApi()` in `client/src/test-utils/renderWithApp.jsx` fakes the API and records params;
+  jsdom lacks `<dialog>.showModal()`, stubbed in `test-utils/setup.js`.
+- Concurrency tests must **force** the overlap (e.g. make storage wait until both requests arrive);
+  otherwise they can pass by luck.
+
+### 0.6 Known follow-ups (not bugs blocking Phase 6)
+
+- Upload queue state isn't cleared on logout (uploads slice); harmless today, tidy up in Phase 7.
+- Background jobs run inside the API process; with several servers they move to one scheduled task (Phase 8).
+- Folder download (ZIP) is not supported; Download is offered for files only.
+- The client-side quota pre-check can be slightly pessimistic near the limit (the server is authoritative).
+
+### 0.7 Where to continue: Phase 6 (Sharing & admin)
+
+1. Inspect the workspace and read §5.3 (share links), the share/admin rows of §6.2, §7.2 (routes `/s/:token`,
+   `/app/shared`, `/app/admin`) and §8 (security).
+2. Propose a 6A (backend) / 6B (frontend) step plan like Phase 5 and **wait for approval** before coding.
+3. The `Share` model, its indexes and the `SHARE_CREATED/REVOKED` activity actions already exist in the schema;
+   the "Share" menu items are present but disabled ("Soon"), and Shared/Admin are greyed out in `navigation.js`.
 
 ---
 
