@@ -79,6 +79,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('./pages/FilesPage.jsx'), 'FilesPage'),
               },
               {
+                path: 'trash',
+                lazy: page(() => import('./pages/TrashPage.jsx'), 'TrashPage'),
+              },
+              {
                 path: 'settings',
                 lazy: page(() => import('./pages/SettingsPage.jsx'), 'SettingsPage'),
               },

@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router';
 import { StorageMeter } from '../../components/common/StorageMeter.jsx';
 import { Logo } from '../../components/ui/Logo.jsx';
 import { selectCurrentUser } from '../../features/auth/authSlice.js';
+import { useGetStatsQuery } from '../../features/dashboard/dashboardApi.js';
 import { NAV_ITEMS } from './navigation.js';
 
 const itemBase =
@@ -11,6 +12,9 @@ const itemBase =
 /** Sidebar content, shared by the desktop sidebar and the mobile drawer. */
 export function Sidebar({ onNavigate }) {
   const user = useSelector(selectCurrentUser);
+  // Live numbers: refetched whenever an upload/delete invalidates 'Stats'. The values
+  // from login are only a fallback until the first answer arrives.
+  const { data: stats } = useGetStatsQuery(undefined, { skip: !user });
   const items = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role));
 
   return (
@@ -59,7 +63,10 @@ export function Sidebar({ onNavigate }) {
 
       {user && (
         <div className="rounded-xl border border-border bg-canvas p-4">
-          <StorageMeter used={user.storageUsed} limit={user.storageLimit} />
+          <StorageMeter
+            used={stats?.storageUsed ?? user.storageUsed}
+            limit={stats?.storageLimit ?? user.storageLimit}
+          />
         </div>
       )}
     </div>

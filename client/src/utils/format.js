@@ -32,3 +32,27 @@ export function formatDate(value, now = new Date()) {
     ? SHORT_DATE.format(date)
     : FULL_DATE.format(date);
 }
+
+const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+const UNITS = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['week', 7 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+];
+
+/**
+ * "just now", "5 minutes ago", "yesterday", "in 27 days", in the user's language.
+ * Uses the largest unit that fits, like people say it.
+ */
+export function formatRelative(value, now = new Date()) {
+  const seconds = Math.round((new Date(value).getTime() - now.getTime()) / 1000);
+  if (Number.isNaN(seconds)) return '';
+  if (Math.abs(seconds) < 60) return 'just now';
+  for (const [unit, size] of UNITS) {
+    if (Math.abs(seconds) >= size) return RELATIVE.format(Math.round(seconds / size), unit);
+  }
+  return 'just now';
+}
