@@ -10,6 +10,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { requestId } from './middleware/requestId.js';
 import { apiRouter } from './routes/index.js';
+import { redactUrl } from './utils/redactUrl.js';
 
 /**
  * Builds the Express app without starting it. server.js calls listen();
@@ -34,7 +35,8 @@ export function createApp() {
       genReqId: (req) => req.id,
       // Log only what's useful for debugging, not every header.
       serializers: {
-        req: (req) => ({ id: req.id, method: req.method, url: req.url }),
+        // redactUrl: share and signed-download tokens in the path never reach the logs.
+        req: (req) => ({ id: req.id, method: req.method, url: redactUrl(req.url) }),
         res: (res) => ({ statusCode: res.statusCode }),
       },
       customLogLevel: (_req, res, err) => {

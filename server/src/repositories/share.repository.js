@@ -47,6 +47,35 @@ export const shareRepository = {
   },
 
   /**
+   * Public lookup by token hash. EVERY condition for a working link is in this one
+   * query (not separate reads), so there is no gap between "checked" and "used":
+   * not revoked, not expired, file fully uploaded and not in trash, owner not suspended.
+   * A trashed folder trashes its files too, so that case is covered by deletedAt.
+   */
+  findPublic(tokenHash, now = new Date()) {
+    return prisma.share.findFirst({
+      where: {
+        tokenHash,
+        ...activeShareWhere(now),
+        file: { status: 'ACTIVE', deletedAt: null, user: { status: 'ACTIVE' } },
+      },
+      include: WITH_FILE,
+    });
+  },
+
+  /**
+   * Counts one download. `increment` runs inside the UPDATE (access_count + 1), so
+   * parallel downloads can't overwrite each other's count, which reading the number in
+   * JavaScript and writing it back would do.
+   */
+  recordAccess(id, now = new Date()) {
+    return prisma.share.update({
+      where: { id },
+      data: { accessCount: { increment: 1 }, lastAccessedAt: now },
+    });
+  },
+
+  /**
    * Revokes the share if it isn't revoked yet. Returns 1 if THIS call revoked it, 0 if
    * it was already revoked (e.g. by a parallel request), so callers log it only once.
    * Still scoped to the owner: defence in depth, even though callers check first.

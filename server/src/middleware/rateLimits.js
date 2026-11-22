@@ -102,6 +102,24 @@ export const uploadLimiter = createLimiter({
   keyGenerator: (req) => `user:${req.auth.userId}`,
 });
 
+/*
+ * Public share links (no login). Per IP. Tokens can't be guessed (256 bits), so these
+ * mainly stop a link from being hammered, e.g. a scraper re-downloading a big file.
+ */
+export const publicShareLimiter = createLimiter({
+  windowMs: MINUTE,
+  limit: 60,
+  message: 'Too many requests for shared links. Please wait a minute and try again.',
+  keyGenerator: clientIp,
+});
+
+export const publicDownloadLimiter = createLimiter({
+  windowMs: MINUTE,
+  limit: 30,
+  message: 'Too many downloads. Please wait a minute and try again.',
+  keyGenerator: clientIp,
+});
+
 /** Tests only: clear all counters so each test starts fresh. */
 export async function resetRateLimits() {
   await Promise.all(stores.map((store) => store.resetAll()));

@@ -23,6 +23,24 @@ const events = (userId, action, files) =>
     metadata: { name: file.originalName },
   }));
 
+/**
+ * Signs a short-lived URL for a file the caller has ALREADY been allowed to read (owner
+ * download or a valid share link). "inline" is downgraded to "attachment" for types that
+ * aren't safe to display, so every way of reaching a file follows the same rule.
+ */
+export async function signedFileLink(file, disposition) {
+  const effective =
+    disposition === 'inline' && isInlineSafe(file.mimeType) ? 'inline' : 'attachment';
+  const expiresIn = env.SIGNED_URL_TTL_SECONDS;
+  const url = await storage.getSignedUrl(file.storageKey, {
+    expiresIn,
+    disposition: effective,
+    filename: file.originalName,
+    contentType: file.mimeType,
+  });
+  return { url, disposition: effective, expiresAt: new Date(Date.now() + expiresIn * 1000) };
+}
+
 /** For single-file endpoints built on the bulk operations: nothing changed = 404. */
 const exactlyOne = (count) => {
   if (count === 0) throw fileNotFound();
@@ -71,22 +89,11 @@ export const fileService = {
   /**
    * A short-lived signed URL for the file's bytes. Ownership is checked HERE; the URL
    * itself then works without login, only for this file and only for a few minutes.
-   * "inline" is downgraded to "attachment" for types that aren't safe to display.
    */
   async downloadUrl(userId, id, { disposition }) {
     const file = await fileRepository.findOwned(userId, id);
     if (!file) throw fileNotFound();
-
-    const effective =
-      disposition === 'inline' && isInlineSafe(file.mimeType) ? 'inline' : 'attachment';
-    const expiresIn = env.SIGNED_URL_TTL_SECONDS;
-    const url = await storage.getSignedUrl(file.storageKey, {
-      expiresIn,
-      disposition: effective,
-      filename: file.originalName,
-      contentType: file.mimeType,
-    });
-    return { url, disposition: effective, expiresAt: new Date(Date.now() + expiresIn * 1000) };
+    return signedFileLink(file, disposition);
   },
 
   /** Rename and/or move one file. Unlike folders, duplicate file names are allowed. */

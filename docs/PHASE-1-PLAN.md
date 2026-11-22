@@ -105,6 +105,8 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Background jobs run inside the API process; with several servers they move to one scheduled task (Phase 8).
 - Folder download (ZIP) is not supported; Download is offered for files only.
 - The client-side quota pre-check can be slightly pessimistic near the limit (the server is authoritative).
+- `publicShareLimiter` / `publicDownloadLimiter` (like every other limiter) use an in-memory store: with several
+  API servers each counts separately. They need a shared store (Redis / ElastiCache) in Phase 8.
 
 ### 0.7 Where to continue: Phase 6 (Sharing & admin)
 
