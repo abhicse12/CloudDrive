@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { FILE_STATE } from './file.repository.js';
+import { FILE_STATE, withShareCount } from './file.repository.js';
 
 export const dashboardRepository = {
   /**
@@ -35,6 +35,7 @@ export const dashboardRepository = {
       where: { userId, ...FILE_STATE.active },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
+      include: withShareCount(),
     });
   },
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { fileController } from '../controllers/file.controller.js';
+import { shareController } from '../controllers/share.controller.js';
 import { uploadLimiter } from '../middleware/rateLimits.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { quotaPrecheck, receiveFiles } from '../middleware/upload.js';
@@ -11,6 +12,7 @@ import {
   listFilesQuery,
   updateFileBody,
 } from '../validators/file.validators.js';
+import { createShareBody } from '../validators/share.validators.js';
 
 export const fileRouter = Router();
 
@@ -40,3 +42,8 @@ fileRouter.patch(
 fileRouter.delete('/:id', byId, fileController.trash);
 fileRouter.post('/:id/restore', byId, fileController.restore);
 fileRouter.delete('/:id/permanent', byId, fileController.deletePermanently);
+fileRouter.post(
+  '/:id/share',
+  validate({ params: idParams, body: createShareBody }),
+  shareController.create,
+);

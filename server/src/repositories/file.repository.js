@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { activeShareWhere } from './share.repository.js';
 
 /*
  * Every query is scoped by userId (IDOR protection, see folder.repository.js).
@@ -16,6 +17,15 @@ export const FILE_STATE = {
  * character itself) so they're matched literally.
  */
 const escapeLike = (value) => value.replace(/[\\%_]/g, '\\$&');
+
+/**
+ * Adds _count.shares = number of WORKING share links, which toFileDto turns into
+ * `isShared`. A function, not a constant: "not expired" must use the current time.
+ * Postgres answers it with one indexed subquery per row (shares.file_id index).
+ */
+export const withShareCount = () => ({
+  _count: { select: { shares: { where: activeShareWhere() } } },
+});
 
 // What bulk operations need back from the rows they changed.
 const SUMMARY = { id: true, originalName: true, folderId: true, storageKey: true, sizeBytes: true };
@@ -56,7 +66,10 @@ export const fileRepository = {
 
   /** One of the user's files in the given state ('active' | 'trashed'), or null. */
   findOwned(userId, id, state = 'active') {
-    return prisma.file.findFirst({ where: { id, userId, ...FILE_STATE[state] } });
+    return prisma.file.findFirst({
+      where: { id, userId, ...FILE_STATE[state] },
+      include: withShareCount(),
+    });
   },
 
   findManyOwned(userId, ids, state) {
@@ -67,7 +80,7 @@ export const fileRepository = {
   },
 
   update(id, data) {
-    return prisma.file.update({ where: { id }, data });
+    return prisma.file.update({ where: { id }, data, include: withShareCount() });
   },
 
   /**
@@ -152,7 +165,7 @@ export const fileRepository = {
       ...(q && { originalName: { contains: escapeLike(q), mode: 'insensitive' } }),
     };
     const [files, total] = await prisma.$transaction([
-      prisma.file.findMany({ where, orderBy, skip, take }),
+      prisma.file.findMany({ where, orderBy, skip, take, include: withShareCount() }),
       prisma.file.count({ where }),
     ]);
     return { files, total };

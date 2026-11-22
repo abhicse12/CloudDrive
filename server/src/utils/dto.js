@@ -29,6 +29,42 @@ export function toFileDto(file) {
     updatedAt: file.updatedAt,
     // null unless in trash
     deletedAt: file.deletedAt,
+    // Has at least one working share link. Queries that list files include the count of
+    // active shares (fileRepository.withShareCount); without it the answer is false.
+    isShared: (file._count?.shares ?? 0) > 0,
+  };
+}
+
+/** 'active' | 'expired' | 'revoked'. Revoked wins: a revoked link stays revoked. */
+export function shareStatus(share, now = new Date()) {
+  if (share.revokedAt) return 'revoked';
+  if (share.expiresAt && share.expiresAt <= now) return 'expired';
+  return 'active';
+}
+
+/**
+ * tokenHash is never sent: the token itself is shown once, at creation, and the hash is
+ * useless to clients. `fileAvailable` is false while the file is in trash (the link is
+ * paused: it works again if the file is restored and the link hasn't expired).
+ */
+export function toShareDto(share, now = new Date()) {
+  const { file } = share;
+  return {
+    id: share.id,
+    status: shareStatus(share, now),
+    expiresAt: share.expiresAt,
+    revokedAt: share.revokedAt,
+    accessCount: share.accessCount,
+    lastAccessedAt: share.lastAccessedAt,
+    createdAt: share.createdAt,
+    fileAvailable: file.deletedAt === null,
+    file: {
+      id: file.id,
+      name: file.originalName,
+      mimeType: file.mimeType,
+      category: file.category,
+      size: Number(file.sizeBytes),
+    },
   };
 }
 
