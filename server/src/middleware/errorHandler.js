@@ -1,4 +1,4 @@
-import { isProduction } from '../config/env.js';
+import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 
 // Converts known non-AppError errors (from libraries) into AppErrors.
@@ -36,7 +36,9 @@ export function errorHandler(err, req, res, next) {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Something went wrong. Please try again later.',
-        ...(!isProduction && { stack: err.stack }),
+        // Only on a developer's own machine. Not in test, staging or production: a stack
+        // trace reveals file paths, library versions and sometimes data from the error.
+        ...(env.NODE_ENV === 'development' && { stack: err.stack }),
       },
       requestId: req.id,
     });

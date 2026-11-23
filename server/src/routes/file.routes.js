@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { fileController } from '../controllers/file.controller.js';
 import { shareController } from '../controllers/share.controller.js';
-import { uploadLimiter } from '../middleware/rateLimits.js';
+import { shareCreateLimiter, uploadLimiter } from '../middleware/rateLimits.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { quotaPrecheck, receiveFiles } from '../middleware/upload.js';
 import { validate } from '../middleware/validate.js';
@@ -44,6 +44,7 @@ fileRouter.post('/:id/restore', byId, fileController.restore);
 fileRouter.delete('/:id/permanent', byId, fileController.deletePermanently);
 fileRouter.post(
   '/:id/share',
+  shareCreateLimiter,
   validate({ params: idParams, body: createShareBody }),
   shareController.create,
 );

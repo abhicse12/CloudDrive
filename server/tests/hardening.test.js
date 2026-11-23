@@ -191,7 +191,7 @@ describe('cleanup keeps going when one item fails', () => {
 
     expect(res.status).toBe(500);
     expect(res.body.error.code).toBe('INTERNAL_ERROR');
-    expect(res.body.error.message).not.toContain('storage unavailable'); // no internals
+    expect(JSON.stringify(res.body)).not.toContain('storage unavailable'); // no internals
     expect(await exists('folder', id)).toBe(true); // still in trash, can be retried
   });
 });

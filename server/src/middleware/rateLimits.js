@@ -102,6 +102,15 @@ export const uploadLimiter = createLimiter({
   keyGenerator: (req) => `user:${req.auth.userId}`,
 });
 
+// Per user. Each link is a database row; without a limit, a script on a logged-in
+// account could create millions. 100 an hour is far above what a person does by hand.
+export const shareCreateLimiter = createLimiter({
+  windowMs: HOUR,
+  limit: 100,
+  message: 'Too many share links created. Please try again later.',
+  keyGenerator: (req) => `user:${req.auth.userId}`,
+});
+
 /*
  * Public share links (no login). Per IP. Tokens can't be guessed (256 bits), so these
  * mainly stop a link from being hammered, e.g. a scraper re-downloading a big file.

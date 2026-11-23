@@ -60,7 +60,8 @@ const envSchema = z.object({
   // ─── Frontend / email ───
   // Public URL of the web app, used to build links inside emails (e.g. password reset).
   APP_URL: z.url().default('http://localhost:5173'),
-  // "console" prints emails to the server log. "ses" (AWS) is added in Phase 8.
+  // "console" prints emails to the server log (development only; refused in production).
+  // "ses" (AWS) is added in Phase 8.
   EMAIL_PROVIDER: z.enum(['console']).default('console'),
 
   // ─── Storage ───
@@ -85,7 +86,8 @@ const envSchema = z.object({
   JOBS_ENABLED: z.stringbool().default(true),
 });
 
-const parsed = envSchema
+// Rules that only apply in production, where a mistake would be a security hole.
+const productionSchema = envSchema
   .refine((cfg) => cfg.NODE_ENV !== 'production' || cfg.COOKIE_SECURE, {
     path: ['COOKIE_SECURE'],
     message: 'must be true in production (cookies would otherwise travel over plain HTTP)',
@@ -94,12 +96,24 @@ const parsed = envSchema
     path: ['BCRYPT_ROUNDS'],
     message: 'must be at least 12 in production',
   })
-  .safeParse(process.env);
+  .refine((cfg) => cfg.NODE_ENV !== 'production' || cfg.EMAIL_PROVIDER !== 'console', {
+    path: ['EMAIL_PROVIDER'],
+    message:
+      'must not be "console" in production: it writes emails, including password reset links, to the logs',
+  });
 
-if (!parsed.success) {
-  // Fail fast: refusing to start is far better than running with broken config.
-  throw new Error(`Invalid environment configuration:\n${z.prettifyError(parsed.error)}`);
+/**
+ * Validates a set of variables (normally process.env). Exported so tests can check the
+ * production rules with plain objects, without starting a process or reading any file.
+ * Fail fast: refusing to start is far better than running with broken config.
+ */
+export function parseEnv(source) {
+  const parsed = productionSchema.safeParse(source);
+  if (!parsed.success) {
+    throw new Error(`Invalid environment configuration:\n${z.prettifyError(parsed.error)}`);
+  }
+  return Object.freeze(parsed.data);
 }
 
-export const env = Object.freeze(parsed.data);
+export const env = parseEnv(process.env);
 export const isProduction = env.NODE_ENV === 'production';
