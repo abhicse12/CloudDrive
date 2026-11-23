@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router';
-import { AuthBootstrap, RequireAuth, RequireGuest } from './features/auth/guards.jsx';
+import { AuthBootstrap, RequireAuth, RequireGuest, RequireRole } from './features/auth/guards.jsx';
 import { AuthLayout } from './layouts/AuthLayout.jsx';
 import { PublicLayout } from './layouts/PublicLayout.jsx';
 import { AppLayout } from './layouts/app/AppLayout.jsx';
@@ -88,6 +88,17 @@ export const router = createBrowserRouter([
               {
                 path: 'trash',
                 lazy: page(() => import('./pages/TrashPage.jsx'), 'TrashPage'),
+              },
+              {
+                // Admins only. Everyone else gets the normal 404 page (RequireRole).
+                path: 'admin',
+                element: <RequireRole roles={['ADMIN']} />,
+                children: [
+                  {
+                    index: true,
+                    lazy: page(() => import('./pages/AdminPage.jsx'), 'AdminPage'),
+                  },
+                ],
               },
               {
                 path: 'settings',

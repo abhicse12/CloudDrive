@@ -11,5 +11,5 @@ export const NAV_ITEMS = [
   { to: '/app/shared', label: 'Shared', Icon: Share2 },
   { to: '/app/trash', label: 'Trash', Icon: Trash2 },
   { to: '/app/settings', label: 'Settings', Icon: Settings },
-  { to: '/app/admin', label: 'Admin', Icon: ShieldCheck, soon: true, roles: ['ADMIN'] },
+  { to: '/app/admin', label: 'Admin', Icon: ShieldCheck, roles: ['ADMIN'] },
 ];
