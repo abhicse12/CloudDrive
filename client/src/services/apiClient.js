@@ -38,6 +38,14 @@ export function setSessionExpiredHandler(handler) {
   onSessionExpired = handler;
 }
 
+// Same idea for "403 FORBIDDEN": the user is logged in but lacks a role the UI thought
+// they had (e.g. an admin was just demoted). The store re-reads /auth/me, so the menu
+// and the route guards catch up at once.
+let onForbidden = () => {};
+export function setForbiddenHandler(handler) {
+  onForbidden = handler;
+}
+
 // ─── CSRF token ───
 let csrfToken = null;
 let csrfRequest = null;
@@ -107,6 +115,10 @@ apiClient.interceptors.response.use(
       }
       return apiClient(config);
     }
+
+    // Only the role check's code: CSRF problems (handled above) and other 403s such as
+    // ACCOUNT_SUSPENDED at login are not about the current user's role.
+    if (response.status === 403 && code === 'FORBIDDEN') onForbidden();
 
     throw error;
   },

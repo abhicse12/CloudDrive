@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { sessionEnded } from '../auth/authSlice.js';
 
 /**
  * The upload list, as the UI shows it. Only plain data lives here (name, size,
@@ -57,6 +58,11 @@ const uploadSlice = createSlice({
     dialogClosed(state) {
       state.dialogOpen = false;
     },
+  },
+  // Logged out: the list (file names!) belonged to the previous user. Running requests
+  // are aborted by the listener in uploadQueue.js.
+  extraReducers: (builder) => {
+    builder.addMatcher(sessionEnded, () => initialState);
   },
 });
 

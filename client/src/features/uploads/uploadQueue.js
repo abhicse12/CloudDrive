@@ -1,8 +1,10 @@
+import { createListenerMiddleware } from '@reduxjs/toolkit';
 import { apiClient, toApiError } from '../../services/apiClient.js';
 import { baseApi } from '../../services/baseApi.js';
 import { selectConfig } from '../../services/configApi.js';
 import { formatBytes } from '../../utils/format.js';
 import { dashboardApi } from '../dashboard/dashboardApi.js';
+import { sessionEnded } from '../auth/authSlice.js';
 import { INVALIDATES } from '../files/cacheTags.js';
 import { describeUploadError } from './uploadErrors.js';
 import {
@@ -134,6 +136,20 @@ export const cancelUpload = (id) => (dispatch) => {
     dispatch(canceled(id));
   }
 };
+
+/**
+ * Stops every upload: running requests are aborted, queued files are dropped. Used when
+ * the session ends, so nothing keeps sending the previous user's files.
+ */
+export function abortAllUploads() {
+  for (const controller of controllers.values()) controller.abort();
+  controllers.clear();
+  pendingFiles.clear();
+}
+
+/** Store middleware: abort uploads whenever the session ends (logout, expiry, reset). */
+export const uploadsListener = createListenerMiddleware();
+uploadsListener.startListening({ matcher: sessionEnded, effect: abortAllUploads });
 
 /**
  * After uploads finish, file lists and storage numbers must refresh. Twenty small

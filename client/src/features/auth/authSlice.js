@@ -1,4 +1,4 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { authApi } from './authApi.js';
 
 /**
@@ -50,6 +50,17 @@ const authSlice = createSlice({
 
 export const { sessionExpired } = authSlice.actions;
 export const authReducer = authSlice.reducer;
+
+/**
+ * Every way this browser stops being logged in. Other slices (uploads) listen to it to
+ * forget the previous user's state, so the next person here never sees it.
+ */
+export const sessionEnded = isAnyOf(
+  sessionExpired,
+  authApi.endpoints.logout.matchFulfilled,
+  authApi.endpoints.logout.matchRejected,
+  authApi.endpoints.resetPassword.matchFulfilled,
+);
 
 export const selectCurrentUser = (state) => state.auth.user;
 export const selectAuthStatus = (state) => state.auth.status;

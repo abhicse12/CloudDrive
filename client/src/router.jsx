@@ -2,7 +2,6 @@ import { createBrowserRouter } from 'react-router';
 import { AuthBootstrap, RequireAuth, RequireGuest, RequireRole } from './features/auth/guards.jsx';
 import { AuthLayout } from './layouts/AuthLayout.jsx';
 import { PublicLayout } from './layouts/PublicLayout.jsx';
-import { AppLayout } from './layouts/app/AppLayout.jsx';
 import { RouteErrorPage } from './pages/RouteErrorPage.jsx';
 
 /**
@@ -70,7 +69,9 @@ export const router = createBrowserRouter([
         children: [
           {
             path: 'app',
-            element: <AppLayout />,
+            // Lazy too: the app shell brings the upload engine, forms and the sidebar,
+            // which visitors of the landing page or a share link never need.
+            lazy: page(() => import('./layouts/app/AppLayout.jsx'), 'AppLayout'),
             children: [
               {
                 index: true,

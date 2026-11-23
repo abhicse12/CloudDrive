@@ -2,6 +2,8 @@ import { AxiosError, CanceledError } from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 import { apiClient } from '../../services/apiClient.js';
 import { createStore } from '../../store/index.js';
+import { authApi } from '../auth/authApi.js';
+import { sessionExpired } from '../auth/authSlice.js';
 import { dashboardApi } from '../dashboard/dashboardApi.js';
 import { filesApi } from '../files/filesApi.js';
 import { cancelUpload, MAX_PARALLEL, startUploads } from './uploadQueue.js';
@@ -43,6 +45,7 @@ function fakeServer() {
         fail: (status, code, message) =>
           reply(status, { success: false, error: { code, message } }),
         networkError: () => reject(new AxiosError('Network Error', 'ERR_NETWORK', config)),
+        aborted: () => config.signal.aborted,
       });
     });
   return { uploads, other };
@@ -59,6 +62,32 @@ const setup = () => {
   const item = (name) => store.getState().uploads.items.find((i) => i.name === name);
   return { store, item };
 };
+
+describe('when the session ends', () => {
+  it.each([
+    ['logging out', (store) => store.dispatch(authApi.endpoints.logout.initiate())],
+    ['the session expiring', (store) => store.dispatch(sessionExpired())],
+  ])('%s aborts running uploads, drops queued ones and forgets the list', async (_label, end) => {
+    const server = fakeServer();
+    const { store } = setup();
+    store.dispatch(
+      startUploads(
+        ['a', 'b', 'c', 'd', 'e'].map((n) => makeFile(`${n}.txt`)),
+        null,
+      ),
+    );
+    await vi.waitFor(() => expect(server.uploads).toHaveLength(MAX_PARALLEL));
+
+    await end(store);
+
+    // The next person on this browser sees no file names from the previous user...
+    expect(store.getState().uploads.items).toEqual([]);
+    // ...and nothing keeps sending the previous user's files.
+    expect(server.uploads.every((u) => u.aborted())).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(server.uploads).toHaveLength(MAX_PARALLEL); // the 2 queued ones never started
+  });
+});
 
 describe('upload queue', () => {
   it(`sends one request per file, at most ${MAX_PARALLEL} at a time`, async () => {
