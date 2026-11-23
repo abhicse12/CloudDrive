@@ -1,7 +1,7 @@
 # CloudDrive — Phase 1: Planning & Architecture
 
-> Status: **Plan confirmed. Phases 1–6 are built and committed.** Next: Phase 7 (testing & optimisation).
-> Plan written 2026-11-05 · Progress section last updated 2026-11-23
+> Status: **Plan confirmed. Phases 1–7 are built and committed.** Next: Phase 8 (AWS deployment).
+> Plan written 2026-11-05 · Progress section last updated 2026-11-24
 
 Contents
 
@@ -28,20 +28,20 @@ This section is the hand-off. A new session should read it first, then `README.m
 
 ### 0.1 Status by phase
 
-| Phase                         | Status      | What exists                                                                                         |
-| ----------------------------- | ----------- | --------------------------------------------------------------------------------------------------- |
-| 1. Planning                   | ✅ Done     | This document                                                                                       |
-| 2. Backend foundation         | ✅ Done     | Workspaces, Express 5, Prisma 7 + migrations, Docker Postgres, health checks, Vitest                |
-| 3+4. Auth + frontend (merged) | ✅ Done     | Cookie JWT + rotating refresh sessions, CSRF, rate limits; React app, auth pages, landing, settings |
-| 5A. Core backend (B1–B6)      | ✅ Done     | Storage layer, folders, uploads, file actions, trash + jobs, dashboard API                          |
-| 5B. Core frontend (U1–U6)     | ✅ Done     | My Files, uploads, selection/menus/move/rename, preview/download, Trash page, dashboard             |
-| 6A. Sharing & admin backend   | ✅ Done     | Share links (owner + public), admin users/stats. See §0.2b                                          |
-| 6B. Sharing & admin UI        | ✅ Done     | Share dialog, public `/s/:token` page, Shared page, Admin page. See §0.2b                           |
-| **7. Testing & optimisation** | ⏭️ **Next** | Not started. See §0.7 and §11 row 7                                                                 |
-| 8. AWS deployment             | Not started | §10, §11 row 8                                                                                      |
+| Phase                         | Status      | What exists                                                                                          |
+| ----------------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| 1. Planning                   | ✅ Done     | This document                                                                                        |
+| 2. Backend foundation         | ✅ Done     | Workspaces, Express 5, Prisma 7 + migrations, Docker Postgres, health checks, Vitest                 |
+| 3+4. Auth + frontend (merged) | ✅ Done     | Cookie JWT + rotating refresh sessions, CSRF, rate limits; React app, auth pages, landing, settings  |
+| 5A. Core backend (B1–B6)      | ✅ Done     | Storage layer, folders, uploads, file actions, trash + jobs, dashboard API                           |
+| 5B. Core frontend (U1–U6)     | ✅ Done     | My Files, uploads, selection/menus/move/rename, preview/download, Trash page, dashboard              |
+| 6A. Sharing & admin backend   | ✅ Done     | Share links (owner + public), admin users/stats. See §0.2b                                           |
+| 6B. Sharing & admin UI        | ✅ Done     | Share dialog, public `/s/:token` page, Shared page, Admin page. See §0.2b                            |
+| 7. Testing & optimisation     | ✅ Done     | IDOR sweep, quota concurrency, coverage, security review, EXPLAIN, frontend tidy-ups, OpenAPI. §0.2c |
+| **8. AWS deployment**         | ⏭️ **Next** | Not started. See §0.7, §10 and §11 row 8                                                             |
 
-Tests at the end of Phase 5: **220 server + 143 client**. At the end of Phase 6: **271 server + 187 client**,
-all passing; lint and Prettier clean; production build OK.
+Tests: end of Phase 5 **220 server + 143 client**; end of Phase 6 **271 + 187**; end of Phase 7 **337 + 211**,
+all passing; lint and Prettier clean; production build OK. Coverage (lines): server **96.9%**, client **93.3%**.
 
 ### 0.2 Phase 5 steps and commits
 
@@ -89,6 +89,30 @@ Decisions made in Phase 6 (all approved):
 - UI wording: "Turn off" (= revoke) and "New link" (= regenerate); "Share…" is offered for a single file only.
 - Admin users table uses numbered pages (20 per page), not "Load more"; all its filters live in the URL.
 
+### 0.2c Phase 7 steps and commits
+
+Phase 7 ran in one go (the user waived per-step approval for this phase only; everything else in §0.4 applied).
+
+| Step | Commit(s)            | Delivered                                                                                                                                                                                             |
+| ---- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `d6acefe`            | `tests/idor.test.js`: every owner endpoint with another user's IDs must answer exactly like a random UUID (404); lists/bulk/dashboard leak nothing; admin 403s                                        |
+| 2    | `88174bd`            | `tests/quota-concurrency.test.js`: forced-overlap uploads, deletes and empty-trash; `storage_used` always equals the sum of stored files                                                              |
+| 3    | `00c193d`, `eafedb7` | v8 coverage (`npm run test:coverage`); tests for signed-but-malicious tokens, EXDEV uploads, cleanup resilience, logout, forgot password; **fix**: logout no longer leaves an unhandled rejection     |
+| 4    | `48b3c8c`            | Security review (`tests/security-review.test.js`); **fixes**: stack traces only in `development`, `EMAIL_PROVIDER=console` refused in production, share creation limited to 100/hour/user             |
+| 5    | `eb8b9cf`            | EXPLAIN on 150k files (`docs/PERFORMANCE.md`, `server/perf/`); `isShared` and admin file counts now per page (root listing 48 → 18 ms, recent files 48 → 1 ms, admin users 45 → 5 ms); no index added |
+| 6    | `0c854d1`            | Uploads aborted and cleared on logout/expiry; a 403 `FORBIDDEN` re-reads `/auth/me` (demoted admin's UI updates); app shell lazy-loaded (−21 kB initial JS)                                           |
+| 7    | `6eacb2f`            | `docs/openapi.yaml` (OpenAPI 3.1, every endpoint) + `tests/api-docs.test.js` (routes ⇄ docs, `$ref`s resolve); README                                                                                 |
+| 8    | (this commit)        | This hand-off                                                                                                                                                                                         |
+
+**Security review result** (details and reasons: §0.6):
+
+- Fixed: stack traces outside development; console email provider in production (reset links in logs); unlimited
+  share creation; logout unhandled rejection; upload queue surviving logout.
+- Verified by tests: headers (CSP, frame-ancestors, nosniff, no-referrer, HSTS, COOP, no-store, no x-powered-by),
+  CORS allow-list, cookie flags and paths, CSRF, generic 500s, IDOR, signed-token path traversal.
+- Not fixed (accepted, see §0.6): `effect` ReDoS via the Prisma CLI, `minimatch` via ESLint, GET download counter,
+  reusable 5-minute signed URLs, email enumeration at sign-up.
+
 ### 0.3 Running it locally
 
 ```bash
@@ -114,7 +138,9 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Don't overwrite files without reading them; never hard-code AWS credentials; never expose secrets to the frontend.
 - Code lives on GitHub: `origin` = https://github.com/abhicse12/CloudDrive. Check `git status` for what is
   unpushed. Ask before pushing; the user often pushes from their own terminal.
-- Commit prefixes: `feat(api)` for backend, `feat(client)` for frontend, `docs` for documentation.
+- Commit prefixes: `feat(api)` / `fix(api)` for backend, `feat(client)` / `fix(client)` for frontend, `test`, `perf`,
+  `docs`, `chore`. The user pushes; don't push.
+- Never read `server/.env`, never touch the dev database's data (use the test DB or a throwaway database).
 
 ### 0.5 Gotchas learned (save time)
 
@@ -140,10 +166,45 @@ npm test                      # all tests (server tests use the test DB on 5433)
   formatter instead of hard-coding them.
 - curl against the dev API needs an `Origin: http://localhost:5173` header (CSRF origin check) and a cookie jar
   path that exists; an empty jar variable once made curl write a file named `-b` in the repo root.
+- **Prisma's filtered `_count` include is a performance trap**: it LEFT JOINs an aggregate over the WHOLE related
+  table. For per-row counts on a page, run a second query for just those IDs (`withShareState`, `withFileCounts`).
+- **Partial indexes don't help Prisma queries on enum columns**: Prisma sends `status = CAST('ACTIVE'::text AS
+"FileStatus")`, which the planner can't match to `WHERE status = 'ACTIVE'`. Prove every index with EXPLAIN.
+- For EXPLAIN work, `server/perf/run.sh` captures the app's real SQL via Postgres statement logging on a throwaway
+  database; it applies migration SQL with `psql`, because `prisma.config.js` loads `.env` from the current folder.
+- `env.js` loads `server/.env` unless `NODE_ENV=test`. Test config rules with `parseEnv({...})`, never with a child
+  process in production mode (it would read the real `.env`).
+- PowerShell 5.1 `Set-Content -Encoding utf8` also writes a BOM (any file type). Use `[IO.File]::WriteAllText` or
+  the Edit tool.
+- npm `overrides` were ignored for a transitive dependency in this workspace setup (lockfile kept the old version);
+  don't fight it with lockfile surgery, it churned the lockfile.
+- Lazy routes can take more than Testing Library's default 1 s under a full run: pass `{ timeout: 5000 }` to
+  `findBy*` (see `client/src/router.test.jsx`).
+- Running an external tool via `npx` (e.g. an OpenAPI linter) was blocked by the permission system; ask the user.
 
-### 0.6 Known follow-ups (not bugs blocking Phase 7)
+### 0.6 Known follow-ups and accepted risks
 
-- Upload queue state isn't cleared on logout (uploads slice); harmless today, tidy up in Phase 7.
+Accepted in the Phase 7 security review (with the reason):
+
+- **`npm audit`: 3 high (`effect` ReDoS, GHSA-7589-6fvf-x4pw)** via `prisma` → `@prisma/config`. Only the Prisma
+  CLI loads it, on our own config file; no request input reaches it, and the runtime `@prisma/client` doesn't use it.
+  The suggested fix downgrades Prisma to 6 (breaking), and an npm override didn't take. Re-check on the next Prisma upgrade.
+- **`npm audit`: moderate (`minimatch`)** via ESLint: dev-only, input is our own glob patterns. ESLint 10.15 fixes
+  it but was only 10 days old at review time; upgrade later.
+- **The public download counter is a GET**, so another site could inflate "Downloads" with `<img src=…>`. It's only a
+  counter (no data leaves without the token); making it a POST would break plain `<a href>` downloads.
+- **Signed file URLs can be reused for their 5 minutes** without a limit (bandwidth only). In AWS they become S3
+  pre-signed URLs, which behave the same; CloudFront/S3 take the load.
+- **Sign-up reveals whether an email is registered** (409 `EMAIL_TAKEN`): a usability trade-off, rate limited
+  (5/hour/IP). Login and password reset don't reveal it.
+- **OpenAPI file not linted with a full OpenAPI validator** (running one via `npx` was blocked). Prettier parses the
+  YAML and `tests/api-docs.test.js` checks routes and `$ref`s. Optional: `npx @redocly/cli lint docs/openapi.yaml`.
+- Performance limits (numbers in `docs/PERFORMANCE.md`): shares list for very heavy sharers (needs `shares.user_id`),
+  search across very many files (`btree_gin` index helps there but hurts elsewhere), admin stats are full scans
+  (cache them if the platform grows).
+
+Still open:
+
 - Background jobs run inside the API process; with several servers they move to one scheduled task (Phase 8).
 - Folder download (ZIP) is not supported; Download is offered for files only.
 - The client-side quota pre-check can be slightly pessimistic near the limit (the server is authoritative).
@@ -153,22 +214,36 @@ npm test                      # all tests (server tests use the test DB on 5433)
   `/api/public/shares/<token>` would be written there. `redactUrl` only covers the app's own logs. Options then:
   restrict and expire those log buckets, or strip the path/query in a CloudFront log configuration.
 - The category palette (Phase 5) fails the dataviz validator's chroma floor for "Other" (slate, on purpose) and warns on
-  CVD/contrast for some pairs. Every chart that uses it therefore labels each category in text. Revisit in Phase 7.
+  CVD/contrast for some pairs. Every chart that uses it therefore labels each category in text (kept in Phase 7).
 - The admin page was tested with unit tests and a production build only; the dev demo account isn't an admin, so
   check it in the browser with the seeded admin account.
 
-### 0.7 Where to continue: Phase 7 (Testing & optimisation)
+### 0.7 Where to continue: Phase 8 (AWS deployment)
 
-Phases 1–6 are complete (every feature in §1.1 exists). Phase 7 hardens what's there; per §11 row 7:
+Phases 1–7 are complete. Phase 8 moves the app to AWS (§10 has the local → AWS mapping, §11 row 8 the deliverables).
+It's the main learning phase, so it goes in **small sub-steps, each explained and approved** (back to the normal
+§0.4 rules). AWS costs money: free-tier sizes, and `terraform destroy` instructions for every resource.
 
-1. Inspect the workspace, then propose a Phase 7 step plan and **wait for approval** before coding. Candidates:
-   - a dedicated **IDOR / ownership** test file that walks every owner endpoint as a second user (§8 promises this);
-   - **quota concurrency** under parallel uploads (forced overlap) and a **coverage report** (`vitest --coverage`);
-   - a **security review** pass (headers, CSP, cookies, rate limits, the §0.6 items);
-   - **EXPLAIN ANALYZE** on the hot queries (file listing, search, shares list, admin stats) with realistic row counts;
-   - frontend: bundle check, code splitting is already per page; the §0.6 tidy-ups (upload queue on logout);
-   - README + API docs (+ a Postman/Bruno collection).
-2. Keep the working rules in §0.4 and the gotchas in §0.5.
+1. Inspect the workspace, then propose the Phase 8 step plan and **wait for approval**. Suggested order:
+   1. **Dockerfile** (multi-stage, non-root, `npm ci --omit=dev`, healthcheck on `/api/health`) + local `docker run`.
+   2. **`S3StorageProvider`** (same interface as `LocalStorageProvider`: upload, download, delete, getMetadata,
+      checkHealth, getSignedUrl via S3 pre-signed URLs; `STORAGE_DRIVER=s3` already removes `/api/storage`).
+      Test it against S3 itself or a local S3 emulator; keep `tests/hardening.test.js`-style tests.
+   3. **SES email provider**. Required: production now **refuses** `EMAIL_PROVIDER=console` (`env.js`).
+   4. **Terraform** in `infra/`: IAM (task role with access to this bucket only, no access keys) → S3 (private,
+      Block Public Access, SSE) → VPC + security groups → RDS (private subnets) → ECR/ECS Fargate + ALB →
+      CloudFront (`/` → SPA bucket, `/api/*` → ALB) + ACM + Route 53 → CloudWatch logs/alarms → Secrets Manager.
+   5. **CI/CD** (GitHub Actions): lint, both test suites with a Postgres service, build, push image, deploy.
+2. Production settings the code already enforces or expects: `NODE_ENV=production`, `COOKIE_SECURE=true` (enables
+   the `__Host-` CSRF cookie), `BCRYPT_ROUNDS>=12`, `EMAIL_PROVIDER` not `console`, `TRUST_PROXY=1` behind the ALB
+   (rate limits use the client IP), `CORS_ORIGINS` and `APP_URL` = the real domain.
+3. Phase 8 items from §0.6: a **shared rate-limit store** (ElastiCache/Redis) once there is more than one task;
+   **background jobs** as one scheduled task (EventBridge → ECS task or Lambda), `JOBS_ENABLED=false` on the web
+   tasks; **ALB/CloudFront access logs** contain share tokens (restrict + expire those buckets, or strip paths);
+   run **migrations** as a one-off task with `prisma migrate deploy` (no `.env` file exists there);
+   re-run **`server/perf/run.sh`** against an RDS copy (never production data) and compare with `docs/PERFORMANCE.md`;
+   consider a CloudFront `Referrer-Policy: no-referrer` response header for `/s/*` as a second layer to the page meta.
+4. Keep the working rules in §0.4 and the gotchas in §0.5.
 
 ---
 

@@ -4,8 +4,8 @@ A cloud file storage and sharing SaaS: upload, organise, preview and securely sh
 with per-user storage quotas. Built locally first, with an architecture designed to move to
 AWS (S3, RDS, ECS, CloudFront) without rewrites.
 
-> **Status:** Phases 1–6 complete: foundation, auth, frontend, file management, sharing and
-> admin. Next: Phase 7 (testing & optimisation), then Phase 8 (AWS deployment).
+> **Status:** Phases 1–7 complete: foundation, auth, frontend, file management, sharing,
+> admin, and testing & optimisation. Next: Phase 8 (AWS deployment).
 > See [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md) for the architecture, API design and roadmap.
 
 ## Features so far
@@ -24,7 +24,7 @@ AWS (S3, RDS, ECS, CloudFront) without rewrites.
 - **Web app:** landing page, split-screen auth pages, My Files, Shared, Trash, dashboard,
   admin, settings, light/dark/system theme, responsive down to phone size
 - **Quality:** 500+ automated tests (API against a real test database, UI with Testing Library),
-  ~97% server / ~91% client line coverage, an IDOR sweep over every endpoint, forced-overlap
+  ~97% server / ~93% client line coverage, an IDOR sweep over every endpoint, forced-overlap
   concurrency tests for quotas, and EXPLAIN-checked queries on 150k files
 
 ## Tech stack
