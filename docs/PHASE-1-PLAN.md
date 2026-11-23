@@ -1,6 +1,6 @@
 # CloudDrive — Phase 1: Planning & Architecture
 
-> Status: **Plan confirmed. Phases 1–5 and the Phase 6 backend (6A) are built and committed.** Next: 6B (frontend).
+> Status: **Plan confirmed. Phases 1–6 are built and committed.** Next: Phase 7 (testing & optimisation).
 > Plan written 2026-11-05 · Progress section last updated 2026-11-23
 
 Contents
@@ -36,12 +36,12 @@ This section is the hand-off. A new session should read it first, then `README.m
 | 5A. Core backend (B1–B6)      | ✅ Done     | Storage layer, folders, uploads, file actions, trash + jobs, dashboard API                          |
 | 5B. Core frontend (U1–U6)     | ✅ Done     | My Files, uploads, selection/menus/move/rename, preview/download, Trash page, dashboard             |
 | 6A. Sharing & admin backend   | ✅ Done     | Share links (owner + public), admin users/stats. See §0.2b                                          |
-| **6B. Sharing & admin UI**    | ⏭️ **Next** | Not started. Steps U1–U5 in §0.7                                                                    |
-| 7. Testing & optimisation     | Not started | §11 row 7                                                                                           |
+| 6B. Sharing & admin UI        | ✅ Done     | Share dialog, public `/s/:token` page, Shared page, Admin page. See §0.2b                           |
+| **7. Testing & optimisation** | ⏭️ **Next** | Not started. See §0.7 and §11 row 7                                                                 |
 | 8. AWS deployment             | Not started | §10, §11 row 8                                                                                      |
 
-Tests at the end of Phase 5: **220 server + 143 client**. After 6A: **271 server + 143 client**, all passing;
-lint and Prettier clean.
+Tests at the end of Phase 5: **220 server + 143 client**. At the end of Phase 6: **271 server + 187 client**,
+all passing; lint and Prettier clean; production build OK.
 
 ### 0.2 Phase 5 steps and commits
 
@@ -59,14 +59,21 @@ lint and Prettier clean.
 | U5    | `d524958` | Preview (image, video, audio, PDF, text via Range), downloads; file-specific CSP on signed file responses                                              |
 | U6    | `58ac72a` | Trash page, dashboard widgets, live sidebar storage meter                                                                                              |
 
-### 0.2b Phase 6A steps and commits
+### 0.2b Phase 6 steps and commits
 
 | Step | Commit    | Delivered                                                                                                                                                      |
 | ---- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6A   |           | **Backend**                                                                                                                                                    |
 | A1   | `2a9df88` | Share create (expiry presets) / list (status filter) / get / revoke (idempotent) / regenerate (same expiry, race-safe); `isShared` on file DTOs                |
 | A2   | `30d5a75` | Public share info + download (302 to signed URL); one query checks every condition; same 404 for every broken link; atomic count; per-IP limits; URL redaction |
 | A3   | `76a80a4` | Admin users list + PATCH; self-protection, last active admin protected with `FOR UPDATE`, limit ≥ usage in one UPDATE; suspend revokes sessions; audit log     |
 | A4   | `7b35944` | Admin stats (one transaction, sign-ups per UTC day via `generate_series`); README + this hand-off                                                              |
+| 6B   |           | **Frontend**                                                                                                                                                   |
+| U1   | `ea68663` | `sharesApi` + `adminApi`, cache tags (trash/delete/rename refresh shares; share changes refresh files); `RequireRole` shows the 404 page                       |
+| U2   | `4365a67` | Share dialog (expiry presets, link shown once, Copy with select-text fallback); Share in ⋯ / right-click / toolbar for single files only; shared badge         |
+| U3   | `0ca3f65` | Public `/s/:token` page: Download + "Open" (only when `canPreview`), no embedded preview, `no-referrer` + `noindex` meta, one generic error (429 separate)     |
+| U4   | `c1c2958` | Shared page: Active/Expired/Revoked tabs in the URL, Downloads + last downloaded, "Turn off" (confirm) and "New link" (shown once), "File in trash" badge      |
+| U5   | `e19c912` | Admin page: stat tiles, sign-ups chart (+ screen-reader table), storage by type, top users; users table (URL filters, pages); edit dialog; activity text       |
 
 Decisions made in Phase 6 (all approved):
 
@@ -79,6 +86,8 @@ Decisions made in Phase 6 (all approved):
   (409 `LAST_ADMIN`), and a limit below current usage is refused (409 `LIMIT_BELOW_USAGE`).
 - Admin changes are logged as `ADMIN_USER_UPDATED` on the admin's account with `{ name, email, changes: { field: { from, to } } }`.
 - Admins see account data and usage only, never anyone's files.
+- UI wording: "Turn off" (= revoke) and "New link" (= regenerate); "Share…" is offered for a single file only.
+- Admin users table uses numbered pages (20 per page), not "Load more"; all its filters live in the URL.
 
 ### 0.3 Running it locally
 
@@ -103,8 +112,9 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Production quality: security first, clean layers (routes → controllers → services → repositories).
 - Every step ends with a deliberate **"break it" check**: disable the key guard, confirm a test fails, restore it.
 - Don't overwrite files without reading them; never hard-code AWS credentials; never expose secrets to the frontend.
-- Code lives on GitHub: `origin` = https://github.com/abhicse12/CloudDrive (Phases 1–5 pushed).
-  Ask before pushing; the user often pushes from their own terminal.
+- Code lives on GitHub: `origin` = https://github.com/abhicse12/CloudDrive. Check `git status` for what is
+  unpushed. Ask before pushing; the user often pushes from their own terminal.
+- Commit prefixes: `feat(api)` for backend, `feat(client)` for frontend, `docs` for documentation.
 
 ### 0.5 Gotchas learned (save time)
 
@@ -123,9 +133,15 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Client tests: `mockApi()` in `client/src/test-utils/renderWithApp.jsx` fakes the API and records params;
   jsdom lacks `<dialog>.showModal()`, stubbed in `test-utils/setup.js`.
 - Concurrency tests must **force** the overlap (e.g. make storage wait until both requests arrive);
-  otherwise they can pass by luck.
+  otherwise they can pass by luck. When the code under test holds a row lock (`FOR UPDATE`), give the barrier a
+  timeout (see the last-admin test in `server/tests/admin.test.js`), or the correct code deadlocks the test.
+- React Hook Form turns **disabled** fields into `undefined`. For a locked field, don't register it (see `EditUserDialog.jsx`).
+- Dates in tests: this machine's locale formats "30 Oct", not "Oct 30". Build expected strings with the app's own
+  formatter instead of hard-coding them.
+- curl against the dev API needs an `Origin: http://localhost:5173` header (CSRF origin check) and a cookie jar
+  path that exists; an empty jar variable once made curl write a file named `-b` in the repo root.
 
-### 0.6 Known follow-ups (not bugs blocking Phase 6)
+### 0.6 Known follow-ups (not bugs blocking Phase 7)
 
 - Upload queue state isn't cleared on logout (uploads slice); harmless today, tidy up in Phase 7.
 - Background jobs run inside the API process; with several servers they move to one scheduled task (Phase 8).
@@ -136,21 +152,23 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - Phase 8: ALB and CloudFront **access logs record full URLs**, so share tokens in `/s/<token>` and
   `/api/public/shares/<token>` would be written there. `redactUrl` only covers the app's own logs. Options then:
   restrict and expire those log buckets, or strip the path/query in a CloudFront log configuration.
+- The category palette (Phase 5) fails the dataviz validator's chroma floor for "Other" (slate, on purpose) and warns on
+  CVD/contrast for some pairs. Every chart that uses it therefore labels each category in text. Revisit in Phase 7.
+- The admin page was tested with unit tests and a production build only; the dev demo account isn't an admin, so
+  check it in the browser with the seeded admin account.
 
-### 0.7 Where to continue: Phase 6B (Sharing & admin frontend)
+### 0.7 Where to continue: Phase 7 (Testing & optimisation)
 
-The backend is finished (§0.2b; endpoints in the README API table). Approved frontend steps:
+Phases 1–6 are complete (every feature in §1.1 exists). Phase 7 hardens what's there; per §11 row 7:
 
-| Step | Delivers                                                                                                                                                                                                                                                                                                                  |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| U1   | `sharesApi` + `adminApi` (RTK Query) and cache tags (trash/delete also invalidates shares); a `RequireRole` guard. No UI.                                                                                                                                                                                                 |
-| U2   | `ShareDialog`: expiry picker, create, link shown once with Copy. Enable Share in the ⋯ / right-click menus and single-select toolbar; `isShared` badge on file cards.                                                                                                                                                     |
-| U3   | Public page `/s/:token` (minimal layout): icon, name, size, expiry, Download, and "Open" only when `canPreview`; **no auto-embedded preview**; one generic not-found state; `<meta name="referrer" content="no-referrer">` + `noindex`; works logged in or out.                                                           |
-| U4   | `/app/shared`: Active / Expired / Revoked tabs; file, created, expires, **"Downloads"** (= `accessCount`), last downloaded; Revoke (confirm), Regenerate (new link shown once); "File in trash" badge (`fileAvailable: false`). Enable the nav item.                                                                      |
-| U5   | `/app/admin`: stat cards, sign-ups bar chart (CSS/SVG, no chart library), storage by category, top users; users table (search, filters, pagination) with an Edit dialog (role, status, limit in GB) that shows the 409 messages. Non-admins get the 404 page. Add an `ADMIN_USER_UPDATED` entry to `describeActivity.js`. |
-
-Where things are: the disabled "Share" item is in `client/src/features/files/FileBrowser.jsx`; Shared/Admin are
-`soon: true` in `client/src/layouts/app/navigation.js`; routes live in `client/src/router.jsx`.
+1. Inspect the workspace, then propose a Phase 7 step plan and **wait for approval** before coding. Candidates:
+   - a dedicated **IDOR / ownership** test file that walks every owner endpoint as a second user (§8 promises this);
+   - **quota concurrency** under parallel uploads (forced overlap) and a **coverage report** (`vitest --coverage`);
+   - a **security review** pass (headers, CSP, cookies, rate limits, the §0.6 items);
+   - **EXPLAIN ANALYZE** on the hot queries (file listing, search, shares list, admin stats) with realistic row counts;
+   - frontend: bundle check, code splitting is already per page; the §0.6 tidy-ups (upload queue on logout);
+   - README + API docs (+ a Postman/Bruno collection).
+2. Keep the working rules in §0.4 and the gotchas in §0.5.
 
 ---
 

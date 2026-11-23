@@ -4,8 +4,8 @@ A cloud file storage and sharing SaaS: upload, organise, preview and securely sh
 with per-user storage quotas. Built locally first, with an architecture designed to move to
 AWS (S3, RDS, ECS, CloudFront) without rewrites.
 
-> **Status:** Phases 1–5 complete (foundation, auth, frontend, file management). Phase 6
-> (sharing & admin) is in progress: the **backend is done**, the frontend comes next.
+> **Status:** Phases 1–6 complete: foundation, auth, frontend, file management, sharing and
+> admin. Next: Phase 7 (testing & optimisation), then Phase 8 (AWS deployment).
 > See [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md) for the architecture, API design and roadmap.
 
 ## Features so far
@@ -16,12 +16,13 @@ AWS (S3, RDS, ECS, CloudFront) without rewrites.
 - **Files & folders:** streaming uploads with per-user quotas, magic-byte type detection,
   folders with breadcrumbs, search/filter/sort, rename/move, trash with restore and auto-purge,
   previews and downloads through short-lived signed URLs, dashboard with usage and activity
-- **Share links** _(API)_: unguessable links (only a hash is stored), expiry presets, revoke,
-  regenerate, download counts; broken links all look the same; tokens are kept out of logs
-- **Admin** _(API)_: user list with usage, role/status/quota changes with an audit log, the
-  last active admin is protected, platform stats
-- **Web app:** landing page, split-screen auth pages, My Files, Trash, dashboard, settings,
-  light/dark/system theme, responsive down to phone size
+- **Share links:** unguessable links (only a hash is stored) with expiry presets, shown once;
+  a public download page that works without an account; turn off or replace a link; download
+  counts; broken links all look the same; tokens are kept out of logs and Referer headers
+- **Admin:** platform stats and sign-ups chart, user list with usage, role/status/quota changes
+  with an audit log; the last active admin is protected; admins never see anyone's files
+- **Web app:** landing page, split-screen auth pages, My Files, Shared, Trash, dashboard,
+  admin, settings, light/dark/system theme, responsive down to phone size
 - **Quality:** 400+ automated tests (API against a real test database, UI with Testing Library)
 
 ## Tech stack
@@ -159,7 +160,7 @@ clouddrive/
         ├── router.jsx        Routes (lazy-loaded pages) and guards
         ├── services/         Axios client (CSRF + silent refresh) and RTK Query base
         ├── store/            Redux store
-        ├── features/         auth, landing, settings (API, state, components)
+        ├── features/         auth, files, uploads, preview, shares, admin, ... (API, state, components)
         ├── layouts/          Public, Auth (split screen), App (sidebar + top bar)
         ├── pages/            One component per route
         ├── components/       Shared UI (Button, Input, Alert, ...)
