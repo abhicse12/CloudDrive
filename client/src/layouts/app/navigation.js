@@ -8,7 +8,7 @@ import { FolderOpen, LayoutDashboard, Settings, Share2, ShieldCheck, Trash2 } fr
 export const NAV_ITEMS = [
   { to: '/app', label: 'Dashboard', Icon: LayoutDashboard, end: true },
   { to: '/app/files', label: 'My Files', Icon: FolderOpen },
-  { to: '/app/shared', label: 'Shared', Icon: Share2, soon: true },
+  { to: '/app/shared', label: 'Shared', Icon: Share2 },
   { to: '/app/trash', label: 'Trash', Icon: Trash2 },
   { to: '/app/settings', label: 'Settings', Icon: Settings },
   { to: '/app/admin', label: 'Admin', Icon: ShieldCheck, soon: true, roles: ['ADMIN'] },

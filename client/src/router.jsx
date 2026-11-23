@@ -82,6 +82,10 @@ export const router = createBrowserRouter([
                 lazy: page(() => import('./pages/FilesPage.jsx'), 'FilesPage'),
               },
               {
+                path: 'shared',
+                lazy: page(() => import('./pages/SharedPage.jsx'), 'SharedPage'),
+              },
+              {
                 path: 'trash',
                 lazy: page(() => import('./pages/TrashPage.jsx'), 'TrashPage'),
               },
