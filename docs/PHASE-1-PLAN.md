@@ -66,7 +66,7 @@ lint and Prettier clean.
 | A1   | `2a9df88` | Share create (expiry presets) / list (status filter) / get / revoke (idempotent) / regenerate (same expiry, race-safe); `isShared` on file DTOs                |
 | A2   | `30d5a75` | Public share info + download (302 to signed URL); one query checks every condition; same 404 for every broken link; atomic count; per-IP limits; URL redaction |
 | A3   | `76a80a4` | Admin users list + PATCH; self-protection, last active admin protected with `FOR UPDATE`, limit ≥ usage in one UPDATE; suspend revokes sessions; audit log     |
-| A4   | (next)    | Admin stats (one transaction, sign-ups per UTC day via `generate_series`); README + this hand-off                                                              |
+| A4   | `7b35944` | Admin stats (one transaction, sign-ups per UTC day via `generate_series`); README + this hand-off                                                              |
 
 Decisions made in Phase 6 (all approved):
 
@@ -133,6 +133,9 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - The client-side quota pre-check can be slightly pessimistic near the limit (the server is authoritative).
 - `publicShareLimiter` / `publicDownloadLimiter` (like every other limiter) use an in-memory store: with several
   API servers each counts separately. They need a shared store (Redis / ElastiCache) in Phase 8.
+- Phase 8: ALB and CloudFront **access logs record full URLs**, so share tokens in `/s/<token>` and
+  `/api/public/shares/<token>` would be written there. `redactUrl` only covers the app's own logs. Options then:
+  restrict and expire those log buckets, or strip the path/query in a CloudFront log configuration.
 
 ### 0.7 Where to continue: Phase 6B (Sharing & admin frontend)
 

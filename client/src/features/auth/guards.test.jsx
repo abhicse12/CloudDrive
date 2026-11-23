@@ -89,10 +89,13 @@ describe('RequireGuest', () => {
 });
 
 describe('RequireRole', () => {
-  it('keeps normal users out of admin pages', () => {
-    renderAt('/app/admin', { user: alice, status: 'authenticated' });
+  it('shows normal users the 404 page, as if admin pages did not exist', () => {
+    const router = renderAt('/app/admin', { user: alice, status: 'authenticated' });
 
-    expect(screen.getByText('Dashboard')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy();
+    expect(screen.queryByText('Admin panel')).toBeNull();
+    // No redirect: the address bar keeps the URL they typed, like any other 404.
+    expect(router.state.location.pathname).toBe('/app/admin');
   });
 
   it('lets admins in', () => {

@@ -33,7 +33,18 @@ export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery(),
   // File/Folder: browsing lists. Trash: the trash page. Stats: storage numbers.
-  // Activity: the dashboard feed. See features/files/cacheTags.js for who refreshes what.
-  tagTypes: ['Me', 'File', 'Folder', 'Trash', 'Stats', 'Activity'],
+  // Activity: the dashboard feed. Share: my share links. AdminUsers/AdminStats: the
+  // admin page. See features/files/cacheTags.js for who refreshes what.
+  tagTypes: [
+    'Me',
+    'File',
+    'Folder',
+    'Trash',
+    'Stats',
+    'Activity',
+    'Share',
+    'AdminUsers',
+    'AdminStats',
+  ],
   endpoints: () => ({}),
 });
