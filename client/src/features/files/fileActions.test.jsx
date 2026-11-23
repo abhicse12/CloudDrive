@@ -171,9 +171,8 @@ describe('menus', () => {
     const menu = screen.getByRole('menu');
     expect(selectedCount().textContent).toContain('1 selected');
     expect(screen.getByRole('checkbox', { name: 'Select Docs' }).checked).toBe(true);
-    expect(
-      within(menu).getByRole('menuitem', { name: /Share/ }).getAttribute('aria-disabled'),
-    ).toBe('true');
+    // Folders can't be shared, so their menu has no Share item at all.
+    expect(within(menu).queryByRole('menuitem', { name: /Share/ })).toBeNull();
 
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/app/files/${DOCS.id}`));

@@ -9,6 +9,7 @@ import { RenameDialog } from './RenameDialog.jsx';
 import { SelectionToolbar } from './SelectionToolbar.jsx';
 import { keyOf } from './selection.js';
 import { PreviewModal } from '../preview/PreviewModal.jsx';
+import { ShareDialog } from '../shares/ShareDialog.jsx';
 import { downloadFiles } from './download.js';
 import { useItemActions } from './useItemActions.js';
 import { useSelection } from './useSelection.js';
@@ -48,6 +49,7 @@ export function FileBrowser({
   const [dialog, setDialog] = useState(null); // { type: 'rename', item } | { type: 'move', items }
   const [contextMenu, setContextMenu] = useState(null); // { x, y, targets }
   const [previewId, setPreviewId] = useState(null);
+  const [shareFile, setShareFile] = useState(null);
 
   // ⋯ / right-click on a selected item acts on the whole selection; on an unselected
   // one, only on that item (like Finder / Explorer / Drive).
@@ -101,7 +103,10 @@ export function FileBrowser({
         Icon: FolderInput,
         onSelect: () => setDialog({ type: 'move', items: targets }),
       },
-      { label: 'Share', Icon: Share2, disabled: true, hint: 'Soon', onSelect: () => {} },
+      // Links are for single files (folders can't be shared).
+      ...(single?.kind === 'file'
+        ? [{ label: 'Share…', Icon: Share2, onSelect: () => setShareFile(single) }]
+        : []),
       { separator: true },
       {
         label: 'Move to trash',
@@ -173,6 +178,11 @@ export function FileBrowser({
             onMove={() => setDialog({ type: 'move', items: selectedItems })}
             onTrash={() => trash(selectedItems)}
             onDownload={onlyFiles(selectedItems) ? () => downloadFiles(selectedItems) : undefined}
+            onShare={
+              selectedItems.length === 1 && selectedItems[0].kind === 'file'
+                ? () => setShareFile(selectedItems[0])
+                : undefined
+            }
           />
         ) : (
           toolbar
@@ -237,6 +247,7 @@ export function FileBrowser({
         onClose={() => setPreviewId(null)}
         onNavigate={setPreviewId}
       />
+      <ShareDialog file={shareFile} onClose={() => setShareFile(null)} />
       <RenameDialog
         item={dialog?.type === 'rename' ? dialog.item : null}
         onClose={() => setDialog(null)}

@@ -1,10 +1,18 @@
-import { Download, FolderInput, Pencil, Trash2, X } from 'lucide-react';
+import { Download, FolderInput, Pencil, Share2, Trash2, X } from 'lucide-react';
 
 const action =
   'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-fg-muted hover:bg-surface hover:text-fg';
 
 /** Replaces the filter bar while items are selected: "3 selected · Rename · Move · Trash". */
-export function SelectionToolbar({ count, onClear, onRename, onMove, onTrash, onDownload }) {
+export function SelectionToolbar({
+  count,
+  onClear,
+  onRename,
+  onMove,
+  onTrash,
+  onDownload,
+  onShare,
+}) {
   return (
     <div
       role="toolbar"
@@ -33,6 +41,13 @@ export function SelectionToolbar({ count, onClear, onRename, onMove, onTrash, on
         <button type="button" onClick={onDownload} className={action}>
           <Download className="size-4" aria-hidden="true" />
           Download
+        </button>
+      )}
+      {/* Only for exactly one file: links are per file. */}
+      {onShare && (
+        <button type="button" onClick={onShare} className={action}>
+          <Share2 className="size-4" aria-hidden="true" />
+          Share
         </button>
       )}
       <button type="button" onClick={onMove} className={action}>

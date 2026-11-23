@@ -1,3 +1,4 @@
+import { Link2 } from 'lucide-react';
 import { formatBytes, formatDate } from '../../utils/format.js';
 import { FileIcon } from './FileIcon.jsx';
 import { ItemMenu, SelectCheckbox } from './ItemControls.jsx';
@@ -34,6 +35,17 @@ function FileName({ file, onOpen, className }) {
   );
 }
 
+/** Small link icon next to the name while the file has a working share link. */
+function SharedBadge({ file }) {
+  if (!file.isShared) return null;
+  return (
+    <span title="Shared with a link" className="shrink-0 text-brand-600 dark:text-brand-400">
+      <Link2 className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">Shared</span>
+    </span>
+  );
+}
+
 export function FileGrid({ files, isSelected, selectionActive, handlersFor, menuFor }) {
   return (
     <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -61,11 +73,14 @@ export function FileGrid({ files, isSelected, selectionActive, handlersFor, menu
             </div>
             <div className="mt-3 flex min-w-0 items-start gap-1">
               <div className="min-w-0 flex-1">
-                <FileName
-                  file={file}
-                  onOpen={handlers.onOpen}
-                  className="block w-full truncate text-sm font-medium"
-                />
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <FileName
+                    file={file}
+                    onOpen={handlers.onOpen}
+                    className="block min-w-0 truncate text-sm font-medium"
+                  />
+                  <SharedBadge file={file} />
+                </div>
                 <p className="mt-0.5 text-xs text-fg-subtle">
                   {formatBytes(file.size)} · {formatDate(file.createdAt)}
                 </p>
@@ -135,6 +150,7 @@ export function FileTable({ files, isSelected, selectionActive, handlersFor, men
                       onOpen={handlers.onOpen}
                       className="truncate font-medium"
                     />
+                    <SharedBadge file={file} />
                   </div>
                 </td>
                 <td className="hidden px-4 py-2.5 text-fg-muted sm:table-cell">
