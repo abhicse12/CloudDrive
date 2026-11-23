@@ -16,6 +16,16 @@ export function toUserDto(user) {
   };
 }
 
+/** A user as admins see them: account and usage, never passwords or files. */
+export function toAdminUserDto(user) {
+  return {
+    ...toUserDto(user),
+    status: user.status,
+    updatedAt: user.updatedAt,
+    fileCount: user._count?.files ?? 0,
+  };
+}
+
 /** storageKey and status stay server-side: clients use the file ID and API endpoints. */
 export function toFileDto(file) {
   return {

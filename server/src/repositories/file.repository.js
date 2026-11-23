@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { escapeLike } from '../utils/escapeLike.js';
 import { activeShareWhere } from './share.repository.js';
 
 /*
@@ -10,13 +11,6 @@ export const FILE_STATE = {
   active: { status: 'ACTIVE', deletedAt: null },
   trashed: { status: 'ACTIVE', deletedAt: { not: null } },
 };
-
-/**
- * Prisma's `contains` becomes LIKE '%<value>%' WITHOUT escaping, so a search for "%"
- * or "_" would act as a wildcard and match everything. Escape them (and the escape
- * character itself) so they're matched literally.
- */
-const escapeLike = (value) => value.replace(/[\\%_]/g, '\\$&');
 
 /**
  * Adds _count.shares = number of WORKING share links, which toFileDto turns into

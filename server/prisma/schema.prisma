@@ -65,6 +65,8 @@ enum ActivityAction {
   SHARE_CREATED
   SHARE_REVOKED
   PASSWORD_CHANGED
+  /// Logged on the ADMIN's account; targetId = the user whose role/status/limit changed.
+  ADMIN_USER_UPDATED
 }
 
 enum ActivityTarget {
