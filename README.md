@@ -23,7 +23,9 @@ AWS (S3, RDS, ECS, CloudFront) without rewrites.
   with an audit log; the last active admin is protected; admins never see anyone's files
 - **Web app:** landing page, split-screen auth pages, My Files, Shared, Trash, dashboard,
   admin, settings, light/dark/system theme, responsive down to phone size
-- **Quality:** 400+ automated tests (API against a real test database, UI with Testing Library)
+- **Quality:** 500+ automated tests (API against a real test database, UI with Testing Library),
+  ~97% server / ~91% client line coverage, an IDOR sweep over every endpoint, forced-overlap
+  concurrency tests for quotas, and EXPLAIN-checked queries on 150k files
 
 ## Tech stack
 
@@ -76,18 +78,20 @@ is sent until AWS SES is added in Phase 8).
 
 Run from the project root:
 
-| Command                          | What it does                                               |
-| -------------------------------- | ---------------------------------------------------------- |
-| `npm run dev`                    | Start API (4000) and web app (5173) in watch mode          |
-| `npm run dev:server` / `:client` | Start only one of them                                     |
-| `npm test`                       | Run all tests (API tests use the separate test database)   |
-| `npm run build`                  | Production build of the web app (`client/dist`)            |
-| `npm run lint` / `lint:fix`      | Check / auto-fix code quality issues                       |
-| `npm run format`                 | Format all files with Prettier                             |
-| `npm run db:up` / `db:down`      | Start / stop the PostgreSQL containers                     |
-| `npm run db:migrate -w server`   | Create + apply a migration after changing `schema.prisma`  |
-| `npm run db:seed -w server`      | Create (or promote) the admin user from `ADMIN_*` settings |
-| `npm run db:studio -w server`    | Browse data in Prisma Studio (localhost:5555)              |
+| Command                          | What it does                                                                |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| `npm run dev`                    | Start API (4000) and web app (5173) in watch mode                           |
+| `npm run dev:server` / `:client` | Start only one of them                                                      |
+| `npm test`                       | Run all tests (API tests use the separate test database)                    |
+| `npm run test:coverage`          | Tests with coverage reports (`server/coverage`, `client/coverage`)          |
+| `bash server/perf/run.sh setup`  | Query performance check on a throwaway database (see `docs/PERFORMANCE.md`) |
+| `npm run build`                  | Production build of the web app (`client/dist`)                             |
+| `npm run lint` / `lint:fix`      | Check / auto-fix code quality issues                                        |
+| `npm run format`                 | Format all files with Prettier                                              |
+| `npm run db:up` / `db:down`      | Start / stop the PostgreSQL containers                                      |
+| `npm run db:migrate -w server`   | Create + apply a migration after changing `schema.prisma`                   |
+| `npm run db:seed -w server`      | Create (or promote) the admin user from `ADMIN_*` settings                  |
+| `npm run db:studio -w server`    | Browse data in Prisma Studio (localhost:5555)                               |
 
 ## Viewing the database
 
@@ -169,6 +173,10 @@ clouddrive/
 
 ## API
 
+**Full reference: [docs/openapi.yaml](docs/openapi.yaml)** (OpenAPI 3.1). Import it into
+Bruno, Postman or Insomnia for a ready-made request collection; a test
+(`server/tests/api-docs.test.js`) fails if a route is added without documenting it.
+
 All responses follow one format:
 
 ```jsonc
@@ -245,4 +253,8 @@ suspended-owner links all return the same `404`.
 | GET    | `/api/admin/users`     | `q`, `role`, `status`, `sortBy=createdAt\|name\|email\|storageUsed`, pagination     |
 | PATCH  | `/api/admin/users/:id` | `{ role?, status?, storageLimit? }`; 409 for self-demotion, last admin, limit < use |
 
-The complete planned API is in [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md#6-api-design).
+Request/response details for every endpoint are in [docs/openapi.yaml](docs/openapi.yaml);
+the original API design and its reasoning are in [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md#6-api-design).
+
+**Testing and security notes:** [docs/PERFORMANCE.md](docs/PERFORMANCE.md) (EXPLAIN results)
+and the security review in [docs/PHASE-1-PLAN.md §0](docs/PHASE-1-PLAN.md#0-progress--how-to-continue).

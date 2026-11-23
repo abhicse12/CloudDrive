@@ -1,0 +1,1019 @@
+openapi: 3.1.0
+info:
+  title: CloudDrive API
+  version: 0.1.0
+  description: |
+    REST API of CloudDrive (file storage and sharing).
+
+    **Envelope.** Every JSON response is `{ "success": true, "data": …, "meta"?: … }` or
+    `{ "success": false, "error": { "code", "message", "details"? }, "requestId" }`.
+    Paginated lists add `meta: { page, pageSize, total, totalPages }`.
+
+    **Auth.** Login sets two HttpOnly cookies: `cd_access` (15-minute JWT, path `/api`) and
+    `cd_refresh` (rotating, path `/api/auth`). A 401 with code `TOKEN_EXPIRED` means: call
+    `POST /api/auth/refresh` and retry.
+
+    **CSRF.** Every POST/PATCH/DELETE needs the `X-CSRF-Token` header with the value of the
+    `cd_csrf` cookie (from `GET /api/auth/csrf`). Requests from an Origin outside the
+    allow-list are refused.
+
+    **Ownership.** Another user's resource always answers `404`, exactly like one that
+    doesn't exist. Admin endpoints answer `403` to non-admins.
+
+    Import this file into Bruno, Postman or Insomnia to get a ready-made collection.
+servers:
+  - url: http://localhost:5173
+    description: Local (Vite forwards /api to the API on :4000)
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Account
+  - name: Config
+  - name: Folders
+  - name: Files
+  - name: Trash
+  - name: Shares
+  - name: Public
+    description: No login. Rate limited per IP. Every broken link is the same 404.
+  - name: Dashboard
+  - name: Admin
+  - name: Storage
+    description: Local storage driver only (replaced by S3 pre-signed URLs in AWS).
+
+security:
+  - cookieAuth: []
+
+paths:
+  # ─── Health ───────────────────────────────────────────────────────────────
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Liveness (the process is up)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope'
+              example:
+                {
+                  success: true,
+                  data: { status: ok, uptimeSeconds: 42, timestamp: '2026-11-24T10:00:00.000Z' },
+                }
+  /api/health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness (database and storage reachable)
+      security: []
+      responses:
+        '200':
+          {
+            description: Ready,
+            content:
+              {
+                application/json:
+                  {
+                    example:
+                      {
+                        success: true,
+                        data:
+                          {
+                            status: ready,
+                            checks:
+                              { database: { status: ok, latencyMs: 2 }, storage: { status: ok } },
+                          },
+                      },
+                  },
+              },
+          }
+        '503': { $ref: '#/components/responses/Error' }
+
+  # ─── Auth ─────────────────────────────────────────────────────────────────
+  /api/auth/csrf:
+    get:
+      tags: [Auth]
+      summary: Issue the CSRF token (cookie + body)
+      security: []
+      responses:
+        '200':
+          {
+            description: Token,
+            content:
+              {
+                application/json:
+                  { example: { success: true, data: { csrfToken: 'base64url-43-chars' } } },
+              },
+          }
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account and log in
+      description: Rate limited (5 per hour per IP).
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              additionalProperties: false
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        '201': { $ref: '#/components/responses/User' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { description: EMAIL_TAKEN, $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in (sets auth cookies)
+      description: Same answer for an unknown email and a wrong password. Rate limited per IP and per IP+email.
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+        '401': { description: INVALID_CREDENTIALS, $ref: '#/components/responses/Error' }
+        '403': { description: ACCOUNT_SUSPENDED, $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate the refresh token and issue a new access token
+      description: Replaying an already-used refresh token revokes the whole session.
+      security: [{ refreshCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: End this session and clear the cookies
+      security: [{ refreshCookie: [] }]
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Logged out }
+  /api/auth/me:
+    get:
+      tags: [Account]
+      summary: The current user
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+        '401': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Account]
+      summary: Update the profile
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties: { name: { type: string, maxLength: 100 } }
+      responses:
+        '200': { $ref: '#/components/responses/User' }
+        '400': { $ref: '#/components/responses/Error' }
+  /api/auth/change-password:
+    post:
+      tags: [Account]
+      summary: Change password; logs out other devices
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        '204': { description: Changed }
+        '400': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/auth/forgot-password:
+    post:
+      tags: [Account]
+      summary: Email a reset link (same answer for any email)
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              {
+                type: object,
+                required: [email],
+                properties: { email: { type: string, format: email } },
+              }
+      responses:
+        '202': { description: Accepted }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/auth/reset-password:
+    post:
+      tags: [Account]
+      summary: Set a new password from a reset link; logs out every device
+      security: []
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 8, maxLength: 72 }
+      responses:
+        '204': { description: Password changed }
+        '400': { $ref: '#/components/responses/Error' }
+
+  # ─── Config ───────────────────────────────────────────────────────────────
+  /api/config:
+    get:
+      tags: [Config]
+      summary: Public limits the frontend needs
+      security: []
+      responses:
+        '200':
+          {
+            description: Limits,
+            content:
+              {
+                application/json:
+                  {
+                    example:
+                      {
+                        success: true,
+                        data:
+                          {
+                            maxFileSizeBytes: 104857600,
+                            maxFilesPerUpload: 20,
+                            trashRetentionDays: 30,
+                          },
+                      },
+                  },
+              },
+          }
+
+  # ─── Folders ──────────────────────────────────────────────────────────────
+  /api/folders:
+    get:
+      tags: [Folders]
+      summary: Subfolders of a folder (no parentId = root)
+      parameters:
+        - { name: parentId, in: query, schema: { type: string, format: uuid } }
+        - { name: sortBy, in: query, schema: { enum: [name, createdAt, updatedAt], default: name } }
+        - { $ref: '#/components/parameters/SortOrder' }
+      responses:
+        '200':
+          {
+            description: Folders,
+            content: { application/json: { schema: { $ref: '#/components/schemas/FolderList' } } },
+          }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Folders]
+      summary: Create a folder
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { $ref: '#/components/schemas/ItemName' }
+                parentId: { type: [string, 'null'], format: uuid }
+      responses:
+        '201': { $ref: '#/components/responses/Folder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Name taken in this folder, $ref: '#/components/responses/Error' }
+  /api/folders/tree:
+    get:
+      tags: [Folders]
+      summary: Every folder, flat (for the "Move to…" picker)
+      responses:
+        '200': { description: '{ folders: [{ id, name, parentId }] }' }
+  /api/folders/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Folders]
+      summary: A folder and its breadcrumbs
+      responses:
+        '200': { description: '{ folder, breadcrumbs: [{ id, name }] }' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Folders]
+      summary: Rename and/or move (moving into its own subtree is refused)
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: { $ref: '#/components/schemas/ItemName' }
+                parentId: { type: [string, 'null'], format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/Folder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Folders]
+      summary: Move the folder and its contents to trash
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Trashed }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/folders/{id}/restore:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Folders]
+      summary: Restore with everything trashed along with it
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '200': { $ref: '#/components/responses/Folder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/folders/{id}/permanent:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    delete:
+      tags: [Folders]
+      summary: Delete forever (must be in trash)
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '200': { description: '{ folders, files } deleted' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          { description: An upload is still running inside, $ref: '#/components/responses/Error' }
+
+  # ─── Files ────────────────────────────────────────────────────────────────
+  /api/files:
+    get:
+      tags: [Files]
+      summary: Files in a folder, or search
+      parameters:
+        - {
+            name: folderId,
+            in: query,
+            description: 'A folder ID, or "all". Omitted = root (or everywhere when q is set).',
+            schema: { type: string },
+          }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: sortBy, in: query, schema: { enum: [name, size, createdAt], default: name } }
+        - { $ref: '#/components/parameters/SortOrder' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          {
+            description: A page of files,
+            content: { application/json: { schema: { $ref: '#/components/schemas/FileList' } } },
+          }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/files/upload:
+    post:
+      tags: [Files]
+      summary: Upload files (one request may carry several)
+      description: |
+        Type is detected from the bytes, not the name. Space is reserved atomically, so
+        parallel uploads can never exceed the quota. 201 if at least one file was stored
+        (the body lists failures); otherwise the shared error (413 QUOTA_EXCEEDED,
+        415 UNSUPPORTED_FILE_TYPE…) or 400 UPLOAD_REJECTED, with per-file details.
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files: { type: array, items: { type: string, format: binary }, maxItems: 20 }
+                folderId: { type: string, format: uuid }
+      responses:
+        '201': { description: '{ uploaded: File[], failed: [{ name, error: { code, message } }] }' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/files/bulk:
+    post:
+      tags: [Files]
+      summary: Trash / restore / move / delete several files
+      description: IDs that aren't yours or aren't in the right state are skipped silently.
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { enum: [trash, restore, move, delete] }
+                ids:
+                  { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 100 }
+                folderId: { type: [string, 'null'], format: uuid, description: 'move only' }
+      responses:
+        '200': { description: '{ action, requested, affected }' }
+        '404':
+          { description: Target folder not found (move), $ref: '#/components/responses/NotFound' }
+  /api/files/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Files]
+      summary: A file and the path to its folder
+      responses:
+        '200': { description: '{ file: File, breadcrumbs }' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Files]
+      summary: Rename and/or move
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name: { $ref: '#/components/schemas/ItemName' }
+                folderId: { type: [string, 'null'], format: uuid }
+      responses:
+        '200': { description: '{ file: File }' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Files]
+      summary: Move to trash (still counts toward the quota)
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Trashed }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/files/{id}/download:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Files]
+      summary: A 5-minute signed link to the bytes
+      description: '"inline" is downgraded to "attachment" for types that are unsafe to display.'
+      parameters:
+        - {
+            name: disposition,
+            in: query,
+            schema: { enum: [attachment, inline], default: attachment },
+          }
+        - { name: redirect, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { description: '{ url, disposition, expiresAt }' }
+        '302': { description: Redirect to the signed URL (redirect=true) }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/files/{id}/restore:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Files]
+      summary: Restore from trash (to the root if its folder is still trashed)
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Restored }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/files/{id}/permanent:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    delete:
+      tags: [Files]
+      summary: Delete forever (must be in trash); frees the quota
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/files/{id}/share:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Shares]
+      summary: Create a share link (the URL is returned ONCE)
+      description: Rate limited (100 per hour per user). Only a SHA-256 of the token is stored.
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expiresIn: { enum: [1h, 1d, 7d, 30d, never], default: 7d }
+      responses:
+        '201': { $ref: '#/components/responses/ShareWithUrl' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  # ─── Trash ────────────────────────────────────────────────────────────────
+  /api/trash:
+    get:
+      tags: [Trash]
+      summary: Top-level trashed folders and files, with purge dates
+      parameters:
+        [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]
+      responses:
+        '200':
+          {
+            description: '{ folders: (Folder & { purgesAt })[], files: (File & { purgesAt })[], retentionDays } + meta',
+          }
+    delete:
+      tags: [Trash]
+      summary: Empty the trash
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '200': { description: '{ folders, files } deleted' }
+
+  # ─── Shares (owner) ───────────────────────────────────────────────────────
+  /api/shares:
+    get:
+      tags: [Shares]
+      summary: My share links, newest first
+      parameters:
+        - { name: status, in: query, schema: { enum: [active, expired, revoked] } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200': { description: '{ shares: Share[] } + meta' }
+  /api/shares/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Shares]
+      summary: One link (the token is never returned again)
+      responses:
+        '200': { description: '{ share: Share }' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Shares]
+      summary: Turn the link off (revoke; idempotent)
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '204': { description: Revoked }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/shares/{id}/regenerate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Shares]
+      summary: Replace the link (new token, same expiry); active links only
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      responses:
+        '201': { $ref: '#/components/responses/ShareWithUrl' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: SHARE_NOT_ACTIVE, $ref: '#/components/responses/Error' }
+
+  # ─── Public share access ──────────────────────────────────────────────────
+  /api/public/shares/{token}:
+    parameters: [{ $ref: '#/components/parameters/Token' }]
+    get:
+      tags: [Public]
+      summary: What a visitor may know about the shared file
+      description: Doesn't count as a download. 60 per minute per IP.
+      security: []
+      responses:
+        '200':
+          description: File info
+          content:
+            application/json:
+              example:
+                {
+                  success: true,
+                  data:
+                    {
+                      share:
+                        {
+                          fileName: report.pdf,
+                          size: 482113,
+                          mimeType: application/pdf,
+                          category: DOCUMENT,
+                          expiresAt: null,
+                          canPreview: true,
+                        },
+                    },
+                }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/Error' }
+  /api/public/shares/{token}/download:
+    parameters: [{ $ref: '#/components/parameters/Token' }]
+    get:
+      tags: [Public]
+      summary: Redirect to the file (counts one download)
+      description: 30 per minute per IP. "inline" only for types safe to display.
+      security: []
+      parameters:
+        - {
+            name: disposition,
+            in: query,
+            schema: { enum: [attachment, inline], default: attachment },
+          }
+      responses:
+        '302': { description: Redirect to a 5-minute signed URL }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/Error' }
+
+  # ─── Dashboard ────────────────────────────────────────────────────────────
+  /api/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Storage used / limit, by category, trash size
+      responses:
+        '200':
+          {
+            description: '{ storageUsed, storageLimit, remaining, percentUsed, fileCount, folderCount, byCategory: [{ category, count, bytes }], trashBytes, trashFileCount }',
+          }
+  /api/dashboard/recent-files:
+    get:
+      tags: [Dashboard]
+      summary: Newest files
+      parameters:
+        [{ name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 8 } }]
+      responses:
+        '200': { description: '{ files: File[] }' }
+  /api/dashboard/activity:
+    get:
+      tags: [Dashboard]
+      summary: Activity feed (cursor paging)
+      parameters:
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 50, default: 10 },
+          }
+        - {
+            name: cursor,
+            in: query,
+            description: nextCursor of the previous page,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        '200':
+          {
+            description: '{ activity: [{ id, action, targetType, targetId, metadata, createdAt }], nextCursor }',
+          }
+
+  # ─── Admin ────────────────────────────────────────────────────────────────
+  /api/admin/stats:
+    get:
+      tags: [Admin]
+      summary: Platform totals, sign-ups (30 UTC days), storage by type, top users
+      responses:
+        '200':
+          {
+            description: '{ users: { total, active, suspended, admins }, files: { count, bytes }, storage: { used, allocated }, activeShares, signups: { days: [{ date, count }], total }, byCategory, topUsers: AdminUser[] }',
+          }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/admin/users:
+    get:
+      tags: [Admin]
+      summary: Every account, with usage
+      parameters:
+        - {
+            name: q,
+            in: query,
+            description: name or email,
+            schema: { type: string, maxLength: 100 },
+          }
+        - { name: role, in: query, schema: { enum: [USER, ADMIN] } }
+        - { name: status, in: query, schema: { enum: [ACTIVE, SUSPENDED] } }
+        - {
+            name: sortBy,
+            in: query,
+            schema: { enum: [createdAt, name, email, storageUsed], default: createdAt },
+          }
+        - { name: sortOrder, in: query, schema: { enum: [asc, desc], default: desc } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          {
+            description: '{ users: AdminUser[] } + meta',
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        properties:
+                          {
+                            data:
+                              {
+                                type: object,
+                                properties:
+                                  {
+                                    users:
+                                      {
+                                        type: array,
+                                        items: { $ref: '#/components/schemas/AdminUser' },
+                                      },
+                                  },
+                              },
+                            meta: { $ref: '#/components/schemas/PageMeta' },
+                          },
+                      },
+                  },
+              },
+          }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/admin/users/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Admin]
+      summary: Change role, status and/or storage limit (audit-logged)
+      description: |
+        409 CANNOT_CHANGE_OWN_ACCESS (demote/suspend yourself), 409 LAST_ADMIN (would leave no
+        active admin), 409 LIMIT_BELOW_USAGE. Suspending logs the user out everywhere and
+        pauses their share links.
+      parameters: [{ $ref: '#/components/parameters/Csrf' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                role: { enum: [USER, ADMIN] }
+                status: { enum: [ACTIVE, SUSPENDED] }
+                storageLimit:
+                  { type: integer, minimum: 0, maximum: 1125899906842624, description: bytes }
+      responses:
+        '200': { description: '{ user: AdminUser }' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Error' }
+
+  # ─── Storage (local driver) ───────────────────────────────────────────────
+  /api/storage/{token}:
+    get:
+      tags: [Storage]
+      summary: Serve file bytes from a signed URL (supports Range)
+      security: []
+      parameters: [{ name: token, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: The bytes }
+        '206': { description: Partial content (Range) }
+        '403': { description: INVALID_SIGNED_URL (tampered or expired) }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: cd_access }
+    refreshCookie: { type: apiKey, in: cookie, name: cd_refresh }
+
+  parameters:
+    Csrf:
+      {
+        name: X-CSRF-Token,
+        in: header,
+        required: true,
+        schema: { type: string },
+        description: Value of the cd_csrf cookie,
+      }
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Token:
+      {
+        name: token,
+        in: path,
+        required: true,
+        schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' },
+      }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize:
+      {
+        name: pageSize,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 50 },
+      }
+    SortOrder: { name: sortOrder, in: query, schema: { enum: [asc, desc], default: asc } }
+
+  responses:
+    Error:
+      {
+        description: Error,
+        content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } },
+      }
+    NotFound:
+      {
+        description: Not found (or not yours),
+        content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } },
+      }
+    Forbidden:
+      {
+        description: Not an admin,
+        content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } },
+      }
+    User:
+      {
+        description: The user,
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  {
+                    type: object,
+                    properties:
+                      {
+                        success: { const: true },
+                        data:
+                          {
+                            type: object,
+                            properties: { user: { $ref: '#/components/schemas/User' } },
+                          },
+                      },
+                  },
+              },
+          },
+      }
+    Folder:
+      {
+        description: The folder,
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  {
+                    type: object,
+                    properties:
+                      {
+                        success: { const: true },
+                        data:
+                          {
+                            type: object,
+                            properties: { folder: { $ref: '#/components/schemas/Folder' } },
+                          },
+                      },
+                  },
+              },
+          },
+      }
+    ShareWithUrl:
+      description: The link, with its URL (shown only now)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success: { const: true }
+              data:
+                type: object
+                properties:
+                  share: { $ref: '#/components/schemas/Share' }
+                  url: { type: string, example: 'http://localhost:5173/s/AbCd…43chars' }
+
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: {}
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    Error:
+      type: object
+      properties:
+        success: { const: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: NOT_FOUND }
+            message: { type: string }
+            details:
+              {
+                type: array,
+                items:
+                  {
+                    type: object,
+                    properties: { field: { type: string }, message: { type: string } },
+                  },
+              }
+        requestId: { type: string }
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+    ItemName:
+      {
+        type: string,
+        minLength: 1,
+        maxLength: 255,
+        description: 'No / \ or control characters; not "." or ".."',
+      }
+    Category: { enum: [IMAGE, VIDEO, AUDIO, DOCUMENT, ARCHIVE, OTHER] }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        role: { enum: [USER, ADMIN] }
+        storageUsed: { type: integer, description: bytes, incl. trash and uploads in progress }
+        storageLimit: { type: integer }
+        createdAt: { type: string, format: date-time }
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            status: { enum: [ACTIVE, SUSPENDED] }
+            updatedAt: { type: string, format: date-time }
+            fileCount: { type: integer }
+    Folder:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        parentId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+    FolderList:
+      type: object
+      properties:
+        success: { const: true }
+        data:
+          {
+            type: object,
+            properties:
+              { folders: { type: array, items: { $ref: '#/components/schemas/Folder' } } },
+          }
+    File:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        folderId: { type: [string, 'null'], format: uuid }
+        mimeType: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        size: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: [string, 'null'], format: date-time }
+        isShared: { type: boolean, description: has at least one working share link }
+    FileList:
+      type: object
+      properties:
+        success: { const: true }
+        data:
+          {
+            type: object,
+            properties: { files: { type: array, items: { $ref: '#/components/schemas/File' } } },
+          }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    Share:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { enum: [active, expired, revoked] }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        revokedAt: { type: [string, 'null'], format: date-time }
+        accessCount: { type: integer, description: downloads (and inline opens) }
+        lastAccessedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        fileAvailable:
+          { type: boolean, description: false while the file is in trash (link paused) }
+        file:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            mimeType: { type: string }
+            category: { $ref: '#/components/schemas/Category' }
+            size: { type: integer }
