@@ -61,6 +61,9 @@ export const router = createBrowserRouter([
         ],
       },
 
+      // Public share links: for everyone, logged in or not (so no guard), own minimal layout.
+      { path: 's/:token', lazy: page(() => import('./pages/SharePage.jsx'), 'SharePage') },
+
       // The logged-in app
       {
         element: <RequireAuth />,
