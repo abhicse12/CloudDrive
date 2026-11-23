@@ -34,10 +34,11 @@ export function UserMenu() {
   async function handleLogout() {
     try {
       await logout().unwrap();
-    } finally {
-      // Logged out locally either way (see authSlice); go to the login page.
-      navigate('/login', { replace: true });
+    } catch {
+      // Server unreachable or session already gone: nothing to show. We are logged out
+      // locally either way (authSlice), and an uncaught rejection would only be noise.
     }
+    navigate('/login', { replace: true });
   }
 
   if (!user) return null;
