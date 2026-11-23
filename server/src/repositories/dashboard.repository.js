@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma.js';
-import { FILE_STATE, withShareCount } from './file.repository.js';
+import { FILE_STATE, withShareState } from './file.repository.js';
 
 export const dashboardRepository = {
   /**
@@ -30,13 +30,13 @@ export const dashboardRepository = {
     return { user, byCategory, folderCount, trash };
   },
 
-  recentFiles(userId, limit) {
-    return prisma.file.findMany({
+  async recentFiles(userId, limit) {
+    const files = await prisma.file.findMany({
       where: { userId, ...FILE_STATE.active },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
-      include: withShareCount(),
     });
+    return withShareState(files);
   },
 
   /**

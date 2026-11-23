@@ -120,6 +120,30 @@ describe('POST /api/files/:id/share', () => {
     await expireInDb(dto.id);
     expect(await isShared()).toBe(false);
   });
+
+  it('reports isShared everywhere a file is shown, for exactly the shared files', async () => {
+    const shared = await uploadOne(alice, SAMPLES.png, 'shared.png');
+    const plain = await uploadOne(alice, SAMPLES.pdf, 'plain.pdf');
+    const revoked = await uploadOne(alice, SAMPLES.text, 'revoked.txt');
+    await createShare(alice, shared.id);
+    await createShare(alice, shared.id); // two links: still one file
+    const off = await createShare(alice, revoked.id);
+    await alice.delete(`/api/shares/${off.share.id}`);
+    const theirs = await uploadOne(bob, SAMPLES.png, 'theirs.png');
+    await createShare(bob, theirs.id);
+
+    const flags = (files) => Object.fromEntries(files.map((f) => [f.name, f.isShared]));
+    const expected = { 'shared.png': true, 'plain.pdf': false, 'revoked.txt': false };
+
+    expect(flags((await alice.get('/api/files')).body.data.files)).toEqual(expected);
+    expect(flags((await alice.get('/api/dashboard/recent-files')).body.data.files)).toEqual(
+      expected,
+    );
+    const renamed = await alice.patch(`/api/files/${shared.id}`).send({ name: 'renamed.png' });
+    expect(renamed.body.data.file.isShared).toBe(true);
+    const unchanged = await alice.patch(`/api/files/${plain.id}`).send({ name: 'plain.pdf' });
+    expect(unchanged.body.data.file.isShared).toBe(false);
+  });
 });
 
 describe('GET /api/shares', () => {

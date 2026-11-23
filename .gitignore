@@ -34,3 +34,6 @@ desktop.ini
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Query performance check output (server/perf/run.sh)
+server/perf/out/

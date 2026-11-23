@@ -13,13 +13,22 @@ export const FILE_STATE = {
 };
 
 /**
- * Adds _count.shares = number of WORKING share links, which toFileDto turns into
- * `isShared`. A function, not a constant: "not expired" must use the current time.
- * Postgres answers it with one indexed subquery per row (shares.file_id index).
+ * Adds `isShared` (has at least one WORKING share link) to each file, for toFileDto.
+ *
+ * One small query for exactly these files, using the shares.file_id index. (Prisma's
+ * `_count` with a filter looked simpler, but it aggregates the WHOLE shares table and
+ * joins it to every listing: EXPLAIN on 25k links showed a full scan per page.)
  */
-export const withShareCount = () => ({
-  _count: { select: { shares: { where: activeShareWhere() } } },
-});
+export async function withShareState(files, db = prisma) {
+  if (files.length === 0) return files;
+  const rows = await db.share.findMany({
+    where: { fileId: { in: files.map((file) => file.id) }, ...activeShareWhere() },
+    select: { fileId: true },
+    distinct: ['fileId'],
+  });
+  const shared = new Set(rows.map((row) => row.fileId));
+  return files.map((file) => ({ ...file, isShared: shared.has(file.id) }));
+}
 
 // What bulk operations need back from the rows they changed.
 const SUMMARY = { id: true, originalName: true, folderId: true, storageKey: true, sizeBytes: true };
@@ -60,10 +69,7 @@ export const fileRepository = {
 
   /** One of the user's files in the given state ('active' | 'trashed'), or null. */
   findOwned(userId, id, state = 'active') {
-    return prisma.file.findFirst({
-      where: { id, userId, ...FILE_STATE[state] },
-      include: withShareCount(),
-    });
+    return prisma.file.findFirst({ where: { id, userId, ...FILE_STATE[state] } });
   },
 
   findManyOwned(userId, ids, state) {
@@ -74,7 +80,7 @@ export const fileRepository = {
   },
 
   update(id, data) {
-    return prisma.file.update({ where: { id }, data, include: withShareCount() });
+    return prisma.file.update({ where: { id }, data });
   },
 
   /**
@@ -159,9 +165,9 @@ export const fileRepository = {
       ...(q && { originalName: { contains: escapeLike(q), mode: 'insensitive' } }),
     };
     const [files, total] = await prisma.$transaction([
-      prisma.file.findMany({ where, orderBy, skip, take, include: withShareCount() }),
+      prisma.file.findMany({ where, orderBy, skip, take }),
       prisma.file.count({ where }),
     ]);
-    return { files, total };
+    return { files: await withShareState(files), total };
   },
 };

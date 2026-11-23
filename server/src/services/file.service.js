@@ -1,7 +1,7 @@
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { activityRepository } from '../repositories/activity.repository.js';
-import { fileRepository } from '../repositories/file.repository.js';
+import { fileRepository, withShareState } from '../repositories/file.repository.js';
 import { folderRepository } from '../repositories/folder.repository.js';
 import { storage } from '../storage/index.js';
 import { AppError } from '../utils/AppError.js';
@@ -78,8 +78,9 @@ export const fileService = {
 
   /** The file plus the path to its folder, for the details panel. */
   async get(userId, id) {
-    const file = await fileRepository.findOwned(userId, id);
-    if (!file) throw fileNotFound();
+    const found = await fileRepository.findOwned(userId, id);
+    if (!found) throw fileNotFound();
+    const [file] = await withShareState([found]);
     const breadcrumbs = file.folderId
       ? await folderRepository.ancestors(userId, file.folderId)
       : [];
@@ -103,7 +104,7 @@ export const fileService = {
 
     const moving = folderId !== undefined && folderId !== file.folderId;
     const renaming = name !== undefined && name !== file.originalName;
-    if (!moving && !renaming) return file;
+    if (!moving && !renaming) return (await withShareState([file]))[0];
     if (moving) await assertFolderOwned(userId, folderId);
 
     const updated = await fileRepository.update(id, {
@@ -120,7 +121,7 @@ export const fileService = {
         ...(renaming && { previousName: file.originalName }),
       },
     });
-    return updated;
+    return (await withShareState([updated]))[0];
   },
 
   /*

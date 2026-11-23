@@ -39,9 +39,9 @@ export function toFileDto(file) {
     updatedAt: file.updatedAt,
     // null unless in trash
     deletedAt: file.deletedAt,
-    // Has at least one working share link. Queries that list files include the count of
-    // active shares (fileRepository.withShareCount); without it the answer is false.
-    isShared: (file._count?.shares ?? 0) > 0,
+    // Has at least one working share link. Set by withShareState (file.repository.js)
+    // on the queries that show files; elsewhere (uploads, trash) it is simply false.
+    isShared: Boolean(file.isShared),
   };
 }
 

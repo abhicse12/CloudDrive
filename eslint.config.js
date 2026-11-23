@@ -42,6 +42,12 @@ export default defineConfig([
     },
   },
 
+  // Command-line tools (server/perf): Node scripts whose output IS the console.
+  {
+    files: ['server/perf/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
+
   // Browser code: the React app
   {
     files: ['client/src/**/*.{js,jsx}'],

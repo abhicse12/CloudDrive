@@ -9,8 +9,22 @@ import { activeShareWhere } from './share.repository.js';
  * They return account data and usage numbers only, never anyone's files.
  */
 
-// How many (active, not trashed) files each user has, for the users table.
-const WITH_FILE_COUNT = { _count: { select: { files: { where: FILE_STATE.active } } } };
+/**
+ * Adds `_count.files` (active, not trashed files) to each user, for the users table.
+ * One GROUP BY over just these users (files_user_id_category_idx). Prisma's filtered
+ * `_count` include would aggregate the WHOLE files table for every page instead
+ * (EXPLAIN: a parallel seq scan of all 150k rows to show 20 users).
+ */
+async function withFileCounts(users, db = prisma) {
+  if (users.length === 0) return users;
+  const rows = await db.file.groupBy({
+    by: ['userId'],
+    where: { userId: { in: users.map((user) => user.id) }, ...FILE_STATE.active },
+    _count: { _all: true },
+  });
+  const counts = new Map(rows.map((row) => [row.userId, row._count._all]));
+  return users.map((user) => ({ ...user, _count: { files: counts.get(user.id) ?? 0 } }));
+}
 
 export const adminRepository = {
   async listUsers({ q, role, status, orderBy, skip, take }) {
@@ -25,10 +39,10 @@ export const adminRepository = {
       }),
     };
     const [users, total] = await prisma.$transaction([
-      prisma.user.findMany({ where, orderBy, skip, take, include: WITH_FILE_COUNT }),
+      prisma.user.findMany({ where, orderBy, skip, take }),
       prisma.user.count({ where }),
     ]);
-    return { users, total };
+    return { users: await withFileCounts(users), total };
   },
 
   /**
@@ -76,14 +90,22 @@ export const adminRepository = {
         prisma.user.findMany({
           orderBy: [{ storageUsed: 'desc' }, { id: 'asc' }],
           take: topUsers,
-          include: WITH_FILE_COUNT,
         }),
       ]);
-    return { usersByState, files, byCategory, storage, activeShares, signups, top };
+    return {
+      usersByState,
+      files,
+      byCategory,
+      storage,
+      activeShares,
+      signups,
+      top: await withFileCounts(top),
+    };
   },
 
-  findUser(id, db = prisma) {
-    return db.user.findUnique({ where: { id }, include: WITH_FILE_COUNT });
+  async findUser(id, db = prisma) {
+    const user = await db.user.findUnique({ where: { id } });
+    return user && (await withFileCounts([user], db))[0];
   },
 
   /**
