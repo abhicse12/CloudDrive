@@ -17,6 +17,7 @@
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w client",
     "test": "npm test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

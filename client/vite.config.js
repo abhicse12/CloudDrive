@@ -31,5 +31,12 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{js,jsx}'],
     setupFiles: ['src/test-utils/setup.js'],
+    // `npm run test:coverage -w client` → summary in the terminal, details in coverage/.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/**/*.test.{js,jsx}', 'src/test-utils/**', 'src/main.jsx'],
+      reporter: ['text-summary', 'text', 'html', 'json-summary'],
+    },
   },
 });

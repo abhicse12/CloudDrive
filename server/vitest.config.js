@@ -34,5 +34,13 @@ export default defineConfig({
     globalSetup: './tests/globalSetup.js',
     // Test files share one database, so run them one at a time to avoid interference.
     fileParallelism: false,
+    // `npm run test:coverage -w server` → summary in the terminal, details in coverage/.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.js'],
+      // Prisma's generated client and the process entry point (listen + signals).
+      exclude: ['src/generated/**', 'src/server.js'],
+      reporter: ['text-summary', 'text', 'html', 'json-summary'],
+    },
   },
 });
