@@ -13,6 +13,7 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole('ADMIN'));
 
+adminRouter.get('/stats', adminController.stats);
 adminRouter.get('/users', validate({ query: listUsersQuery }), adminController.listUsers);
 adminRouter.patch(
   '/users/:id',

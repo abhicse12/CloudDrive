@@ -4,6 +4,7 @@ import { adminRepository } from '../repositories/admin.repository.js';
 import { sessionRepository } from '../repositories/session.repository.js';
 import { AppError } from '../utils/AppError.js';
 import { pageMeta, toSkipTake } from '../utils/pagination.js';
+import { FILE_CATEGORIES } from '../validators/file.validators.js';
 
 const SORT_FIELDS = {
   createdAt: 'createdAt',
@@ -30,7 +31,47 @@ function diffUser(user, changes) {
   );
 }
 
+const toNumber = (bigint) => Number(bigint ?? 0n);
+
 export const adminService = {
+  async stats() {
+    const { usersByState, files, byCategory, storage, activeShares, signups, top } =
+      await adminRepository.stats();
+
+    const countUsers = (match) =>
+      usersByState.filter(match).reduce((sum, row) => sum + row._count._all, 0);
+
+    // Every category is always present (zeros included), like the user dashboard.
+    const rows = new Map(byCategory.map((row) => [row.category, row]));
+
+    return {
+      users: {
+        total: countUsers(() => true),
+        active: countUsers((row) => row.status === 'ACTIVE'),
+        suspended: countUsers((row) => row.status === 'SUSPENDED'),
+        admins: countUsers((row) => row.role === 'ADMIN' && row.status === 'ACTIVE'),
+      },
+      files: { count: files._count._all, bytes: toNumber(files._sum.sizeBytes) },
+      storage: {
+        // Includes trash and uploads in progress: what users are actually charged for.
+        used: toNumber(storage._sum.storageUsed),
+        // Sum of every user's quota: how much has been promised, not what's on disk.
+        allocated: toNumber(storage._sum.storageLimit),
+      },
+      activeShares,
+      signups: {
+        days: signups,
+        total: signups.reduce((sum, day) => sum + day.count, 0),
+      },
+      byCategory: FILE_CATEGORIES.map((category) => ({
+        category,
+        count: rows.get(category)?._count._all ?? 0,
+        bytes: toNumber(rows.get(category)?._sum.sizeBytes),
+      })),
+      topUsers: top,
+    };
+  },
+
   async listUsers(query) {
     const { users, total } = await adminRepository.listUsers({
       q: query.q,

@@ -1,7 +1,7 @@
 # CloudDrive — Phase 1: Planning & Architecture
 
-> Status: **Plan confirmed. Phases 1–5 are built and committed.** Next: Phase 6.
-> Plan written 2026-11-05 · Progress section last updated 2026-11-22
+> Status: **Plan confirmed. Phases 1–5 and the Phase 6 backend (6A) are built and committed.** Next: 6B (frontend).
+> Plan written 2026-11-05 · Progress section last updated 2026-11-23
 
 Contents
 
@@ -35,11 +35,13 @@ This section is the hand-off. A new session should read it first, then `README.m
 | 3+4. Auth + frontend (merged) | ✅ Done     | Cookie JWT + rotating refresh sessions, CSRF, rate limits; React app, auth pages, landing, settings |
 | 5A. Core backend (B1–B6)      | ✅ Done     | Storage layer, folders, uploads, file actions, trash + jobs, dashboard API                          |
 | 5B. Core frontend (U1–U6)     | ✅ Done     | My Files, uploads, selection/menus/move/rename, preview/download, Trash page, dashboard             |
-| **6. Sharing & admin**        | ⏭️ **Next** | Not started. See §5.3 (share flow), §6.2 (share + admin endpoints), §11 row 6                       |
+| 6A. Sharing & admin backend   | ✅ Done     | Share links (owner + public), admin users/stats. See §0.2b                                          |
+| **6B. Sharing & admin UI**    | ⏭️ **Next** | Not started. Steps U1–U5 in §0.7                                                                    |
 | 7. Testing & optimisation     | Not started | §11 row 7                                                                                           |
 | 8. AWS deployment             | Not started | §10, §11 row 8                                                                                      |
 
-Tests at the end of Phase 5: **220 server + 143 client, all passing**; lint and Prettier clean.
+Tests at the end of Phase 5: **220 server + 143 client**. After 6A: **271 server + 143 client**, all passing;
+lint and Prettier clean.
 
 ### 0.2 Phase 5 steps and commits
 
@@ -56,6 +58,27 @@ Tests at the end of Phase 5: **220 server + 143 client, all passing**; lint and 
 | U4    | `e82d6a0` | Selection (click/Ctrl/Shift), toolbar, ⋯ + right-click menus, rename, move dialog, trash with Undo, shortcuts                                          |
 | U5    | `d524958` | Preview (image, video, audio, PDF, text via Range), downloads; file-specific CSP on signed file responses                                              |
 | U6    | `58ac72a` | Trash page, dashboard widgets, live sidebar storage meter                                                                                              |
+
+### 0.2b Phase 6A steps and commits
+
+| Step | Commit    | Delivered                                                                                                                                                      |
+| ---- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1   | `2a9df88` | Share create (expiry presets) / list (status filter) / get / revoke (idempotent) / regenerate (same expiry, race-safe); `isShared` on file DTOs                |
+| A2   | `30d5a75` | Public share info + download (302 to signed URL); one query checks every condition; same 404 for every broken link; atomic count; per-IP limits; URL redaction |
+| A3   | `76a80a4` | Admin users list + PATCH; self-protection, last active admin protected with `FOR UPDATE`, limit ≥ usage in one UPDATE; suspend revokes sessions; audit log     |
+| A4   | (next)    | Admin stats (one transaction, sign-ups per UTC day via `generate_series`); README + this hand-off                                                              |
+
+Decisions made in Phase 6 (all approved):
+
+- Expiry is a preset only (`1h/1d/7d/30d/never`, default `7d`), no custom date.
+- Trashing a file **pauses** its links (they work again after restore); permanent delete removes them (cascade).
+- Regenerate = revoke + new token with the **same absolute expiry**; only for active links (else 409 `SHARE_NOT_ACTIVE`).
+- `accessCount` counts every byte download, **inline "Open" included** (the page loads metadata only; that isn't counted).
+  So the UI labels it **"Downloads"**, and the share page must **not** auto-embed a preview.
+- Admins can't demote/suspend themselves (409 `CANNOT_CHANGE_OWN_ACCESS`), nobody can remove the last active admin
+  (409 `LAST_ADMIN`), and a limit below current usage is refused (409 `LIMIT_BELOW_USAGE`).
+- Admin changes are logged as `ADMIN_USER_UPDATED` on the admin's account with `{ name, email, changes: { field: { from, to } } }`.
+- Admins see account data and usage only, never anyone's files.
 
 ### 0.3 Running it locally
 
@@ -88,6 +111,9 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - **Prisma `migrate dev` fails non-interactively.** Instead: `npx prisma migrate diff --from-config-datasource
 --to-schema prisma/schema.prisma --script` into a new `prisma/migrations/<UTC timestamp>_<name>/migration.sql`,
   then `npx prisma migrate deploy`. CHECK constraints, partial/expression indexes, pg_trgm and ICU collation are hand-written SQL.
+- **Migration files must not start with a BOM.** PowerShell 5.1 `Out-File -Encoding utf8` writes one, and the Write tool keeps
+  an existing one; Postgres then fails with `syntax error at or near "﻿"`. Strip it (`sed -i '1s/^\xEF\xBB\xBF//' file`),
+  run `npx prisma migrate resolve --rolled-back <name>`, then deploy again. Run `npx prisma generate` after enum changes.
 - **Don't start a second Vite/API server when the user's `npm run dev` is running.** Check ports 5173/4000 first and
   test against the running servers. A second Vite wiped the shared dep cache once (blank page, `504 Outdated Optimize Dep`;
   fix: restart `npm run dev`, hard refresh).
@@ -108,13 +134,20 @@ npm test                      # all tests (server tests use the test DB on 5433)
 - `publicShareLimiter` / `publicDownloadLimiter` (like every other limiter) use an in-memory store: with several
   API servers each counts separately. They need a shared store (Redis / ElastiCache) in Phase 8.
 
-### 0.7 Where to continue: Phase 6 (Sharing & admin)
+### 0.7 Where to continue: Phase 6B (Sharing & admin frontend)
 
-1. Inspect the workspace and read §5.3 (share links), the share/admin rows of §6.2, §7.2 (routes `/s/:token`,
-   `/app/shared`, `/app/admin`) and §8 (security).
-2. Propose a 6A (backend) / 6B (frontend) step plan like Phase 5 and **wait for approval** before coding.
-3. The `Share` model, its indexes and the `SHARE_CREATED/REVOKED` activity actions already exist in the schema;
-   the "Share" menu items are present but disabled ("Soon"), and Shared/Admin are greyed out in `navigation.js`.
+The backend is finished (§0.2b; endpoints in the README API table). Approved frontend steps:
+
+| Step | Delivers                                                                                                                                                                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| U1   | `sharesApi` + `adminApi` (RTK Query) and cache tags (trash/delete also invalidates shares); a `RequireRole` guard. No UI.                                                                                                                                                                                                 |
+| U2   | `ShareDialog`: expiry picker, create, link shown once with Copy. Enable Share in the ⋯ / right-click menus and single-select toolbar; `isShared` badge on file cards.                                                                                                                                                     |
+| U3   | Public page `/s/:token` (minimal layout): icon, name, size, expiry, Download, and "Open" only when `canPreview`; **no auto-embedded preview**; one generic not-found state; `<meta name="referrer" content="no-referrer">` + `noindex`; works logged in or out.                                                           |
+| U4   | `/app/shared`: Active / Expired / Revoked tabs; file, created, expires, **"Downloads"** (= `accessCount`), last downloaded; Revoke (confirm), Regenerate (new link shown once); "File in trash" badge (`fileAvailable: false`). Enable the nav item.                                                                      |
+| U5   | `/app/admin`: stat cards, sign-ups bar chart (CSS/SVG, no chart library), storage by category, top users; users table (search, filters, pagination) with an Edit dialog (role, status, limit in GB) that shows the 409 messages. Non-admins get the 404 page. Add an `ADMIN_USER_UPDATED` entry to `describeActivity.js`. |
+
+Where things are: the disabled "Share" item is in `client/src/features/files/FileBrowser.jsx`; Shared/Admin are
+`soon: true` in `client/src/layouts/app/navigation.js`; routes live in `client/src/router.jsx`.
 
 ---
 

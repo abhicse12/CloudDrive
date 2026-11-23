@@ -4,8 +4,8 @@ A cloud file storage and sharing SaaS: upload, organise, preview and securely sh
 with per-user storage quotas. Built locally first, with an architecture designed to move to
 AWS (S3, RDS, ECS, CloudFront) without rewrites.
 
-> **Status:** Phases 1–4 complete: backend foundation, authentication, and the frontend
-> (landing page, auth pages, app shell, settings). File management comes in Phase 5.
+> **Status:** Phases 1–5 complete (foundation, auth, frontend, file management). Phase 6
+> (sharing & admin) is in progress: the **backend is done**, the frontend comes next.
 > See [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md) for the architecture, API design and roadmap.
 
 ## Features so far
@@ -13,9 +13,16 @@ AWS (S3, RDS, ECS, CloudFront) without rewrites.
 - **Accounts:** register, log in, log out, forgot/reset password, update profile, change password
 - **Secure sessions:** short-lived JWT + rotating refresh token in HttpOnly cookies, refresh-token
   reuse detection, CSRF protection, rate limiting, instant logout and suspension
-- **Web app:** landing page, split-screen auth pages, dashboard shell with sidebar, settings,
+- **Files & folders:** streaming uploads with per-user quotas, magic-byte type detection,
+  folders with breadcrumbs, search/filter/sort, rename/move, trash with restore and auto-purge,
+  previews and downloads through short-lived signed URLs, dashboard with usage and activity
+- **Share links** _(API)_: unguessable links (only a hash is stored), expiry presets, revoke,
+  regenerate, download counts; broken links all look the same; tokens are kept out of logs
+- **Admin** _(API)_: user list with usage, role/status/quota changes with an audit log, the
+  last active admin is protected, platform stats
+- **Web app:** landing page, split-screen auth pages, My Files, Trash, dashboard, settings,
   light/dark/system theme, responsive down to phone size
-- **Quality:** 100+ automated tests (API against a real test database, UI with Testing Library)
+- **Quality:** 400+ automated tests (API against a real test database, UI with Testing Library)
 
 ## Tech stack
 
@@ -132,14 +139,14 @@ clouddrive/
 ├── docs/                     Architecture and planning docs
 ├── server/                   REST API
 │   ├── prisma/               Schema, migrations (incl. hand-written SQL constraints), seed
-│   ├── tests/                API tests (auth, files, uploads, folders, trash, jobs, ...)
+│   ├── tests/                API tests (auth, files, uploads, folders, trash, shares, admin, ...)
 │   └── src/
 │       ├── app.js            Express app + middleware order
 │       ├── server.js         Startup, background jobs and graceful shutdown
 │       ├── config/           env validation, logger, Prisma client
 │       ├── routes/           URL → middleware → controller
 │       ├── controllers/      HTTP in/out only
-│       ├── services/         Business rules (auth, files, uploads, folders, trash, dashboard)
+│       ├── services/         Business rules (auth, files, uploads, folders, trash, shares, admin, ...)
 │       ├── repositories/     Database queries (always scoped to the user)
 │       ├── middleware/       auth, roles, CSRF, rate limits, validation, uploads, errors
 │       ├── validators/       Zod request schemas
@@ -213,5 +220,28 @@ return 404):
 | GET    | `/api/dashboard/stats`        | Storage used/limit, usage by category, trash size                       |
 | GET    | `/api/dashboard/recent-files` | Newest files (`limit`, default 8)                                       |
 | GET    | `/api/dashboard/activity`     | Activity feed (`limit`, `cursor` → `nextCursor`)                        |
+
+**Share links** (owner endpoints require login; someone else's share is always 404):
+
+| Method | Path                                 | Auth | Description                                                                 |
+| ------ | ------------------------------------ | ---- | --------------------------------------------------------------------------- |
+| POST   | `/api/files/:id/share`               | ✔    | `{ expiresIn: 1h\|1d\|7d\|30d\|never }` (default `7d`) → `{ share, url }`   |
+| GET    | `/api/shares`                        | ✔    | My links: `status=active\|expired\|revoked`, `page`/`pageSize`              |
+| GET    | `/api/shares/:id`                    | ✔    | One link (the token is never returned again)                                |
+| DELETE | `/api/shares/:id`                    | ✔    | Revoke (idempotent)                                                         |
+| POST   | `/api/shares/:id/regenerate`         | ✔    | Revoke + new link with the same expiry → `{ share, url }`                   |
+| GET    | `/api/public/shares/:token`          | -    | File name, size, type, expiry, `canPreview`. Rate limited per IP            |
+| GET    | `/api/public/shares/:token/download` | -    | `disposition=attachment\|inline` → 302 to a signed URL; counts the download |
+
+The `url` with the token is shown **once**. Unknown, revoked, expired, trashed and
+suspended-owner links all return the same `404`.
+
+**Admin** (require the `ADMIN` role, else `403`):
+
+| Method | Path                   | Description                                                                         |
+| ------ | ---------------------- | ----------------------------------------------------------------------------------- |
+| GET    | `/api/admin/stats`     | Users, files, storage, working links, sign-ups (30 days), by category, top users    |
+| GET    | `/api/admin/users`     | `q`, `role`, `status`, `sortBy=createdAt\|name\|email\|storageUsed`, pagination     |
+| PATCH  | `/api/admin/users/:id` | `{ role?, status?, storageLimit? }`; 409 for self-demotion, last admin, limit < use |
 
 The complete planned API is in [docs/PHASE-1-PLAN.md](docs/PHASE-1-PLAN.md#6-api-design).

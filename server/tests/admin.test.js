@@ -258,3 +258,97 @@ describe('the last active admin', () => {
     expect(await prisma.user.count({ where: { role: 'ADMIN', status: 'ACTIVE' } })).toBe(1);
   });
 });
+
+describe('GET /api/admin/stats', () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const utcDate = (date) => date.toISOString().slice(0, 10);
+
+  it('is for admins only', async () => {
+    expect((await alice.get('/api/admin/stats')).status).toBe(403);
+  });
+
+  it('counts users, files, storage and working share links', async () => {
+    await setUser(bob, { status: 'SUSPENDED' });
+
+    const pdf = await uploadOne(alice, SAMPLES.pdf, 'a.pdf');
+    const png = await uploadOne(alice, SAMPLES.png, 'b.png');
+    await alice.delete(`/api/files/${png.id}`); // trashed: not a file, but still storage
+    // An upload still in progress must not count as a file.
+    await prisma.file.create({
+      data: {
+        userId: alice.user.id,
+        originalName: 'half.bin',
+        storageKey: `test/${randomUUID()}`,
+        mimeType: 'application/octet-stream',
+        category: 'OTHER',
+        sizeBytes: 999n,
+        status: 'UPLOADING',
+      },
+    });
+
+    const shareOf = async (fileId) =>
+      (await alice.post(`/api/files/${fileId}/share`).send({})).body.data.share;
+    await shareOf(pdf.id); // works
+    const revoked = await shareOf(pdf.id);
+    await alice.delete(`/api/shares/${revoked.id}`);
+    const pngFile = await uploadOne(alice, SAMPLES.png, 'c.png');
+    await shareOf(pngFile.id);
+    await alice.delete(`/api/files/${pngFile.id}`); // paused: file in trash
+
+    const res = await admin.get('/api/admin/stats');
+
+    expect(res.status).toBe(200);
+    const data = res.body.data;
+    expect(data.users).toEqual({ total: 3, active: 2, suspended: 1, admins: 1 });
+    expect(data.files).toEqual({ count: 1, bytes: SAMPLES.pdf.length });
+    expect(data.storage).toEqual({
+      used: SAMPLES.pdf.length + 2 * SAMPLES.png.length,
+      allocated: 3 * 5 * 1024 ** 3,
+    });
+    expect(data.activeShares).toBe(1);
+
+    expect(data.byCategory.map((row) => row.category)).toEqual([
+      'IMAGE',
+      'VIDEO',
+      'AUDIO',
+      'DOCUMENT',
+      'ARCHIVE',
+      'OTHER',
+    ]);
+    expect(data.byCategory.find((row) => row.category === 'DOCUMENT')).toEqual({
+      category: 'DOCUMENT',
+      count: 1,
+      bytes: SAMPLES.pdf.length,
+    });
+    expect(data.byCategory.find((row) => row.category === 'OTHER').count).toBe(0);
+  });
+
+  it('gives sign-ups for each of the last 30 UTC days, zeros included', async () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * DAY_MS);
+    await setUser(alice, { createdAt: tenDaysAgo });
+    await setUser(bob, { createdAt: new Date(Date.now() - 40 * DAY_MS) }); // too old
+
+    const { signups } = (await admin.get('/api/admin/stats')).body.data;
+
+    expect(signups.days).toHaveLength(30);
+    expect(signups.days.at(-1)).toEqual({ date: utcDate(new Date()), count: 1 }); // admin
+    expect(signups.days[0].date).toBe(utcDate(new Date(Date.now() - 29 * DAY_MS)));
+    expect(signups.days.find((d) => d.date === utcDate(tenDaysAgo)).count).toBe(1);
+    expect(signups.total).toBe(2);
+  });
+
+  it('lists the top users by storage used', async () => {
+    await uploadOne(alice, SAMPLES.pdf, 'a.pdf');
+    await uploadOne(alice, SAMPLES.png, 'b.png');
+    await uploadOne(bob, SAMPLES.png, 'c.png');
+
+    const { topUsers } = (await admin.get('/api/admin/stats')).body.data;
+
+    expect(topUsers.map((u) => u.name)).toEqual(['Alice', 'Bob', 'Admin']);
+    expect(topUsers[0]).toMatchObject({
+      storageUsed: SAMPLES.pdf.length + SAMPLES.png.length,
+      fileCount: 2,
+    });
+    expect(JSON.stringify(topUsers)).not.toMatch(/password/i);
+  });
+});
